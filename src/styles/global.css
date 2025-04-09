@@ -1,0 +1,101 @@
+:root {
+  --text-primary: #222;
+  --text-secondary: #444;
+  --bg-primary: #fff;
+  --line-color: #eee;
+  --max-width: 720px;
+  --font-serif: 'Georgia', serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text-primary: #f0f0f0;
+    --text-secondary: #ccc;
+    --bg-primary: #111;
+    --line-color: #333;
+  }
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-serif);
+  line-height: 1.6;
+  margin: 0 auto;
+  max-width: var(--max-width);
+  padding: 2rem 1rem;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 2rem 0 1rem;
+}
+
+h1 {
+  font-size: 2.2rem;
+}
+
+h2 {
+  font-size: 1.8rem;
+}
+
+h3 {
+  font-size: 1.4rem;
+}
+
+a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--text-secondary);
+  text-underline-offset: 0.2em;
+  transition: text-decoration-color 0.2s;
+}
+
+a:hover {
+  text-decoration-color: var(--text-primary);
+}
+
+article {
+  margin-bottom: 4rem;
+}
+
+time {
+  color: var(--text-secondary);
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--line-color);
+  margin: 3rem 0;
+}
+
+img {
+  height: auto;
+  max-width: 100%;
+}
+
+@media (max-width: 640px) {
+  body {
+    padding: 1.5rem 1rem;
+  }
+  
+  h1 {
+    font-size: 1.8rem;
+  }
+}
+
+header {
+  margin-bottom: 2rem;
+}
+
+nav a {
+  margin-right: 1rem;
+}

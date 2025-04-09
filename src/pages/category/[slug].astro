@@ -1,0 +1,46 @@
+---
+import BlogLayout from '../../layouts/BlogLayout.astro';
+
+export const prerender = false;
+
+const { slug } = Astro.params;
+const response = await fetch(`http://localhost:3000/api/posts?category=${encodeURIComponent(slug)}`);
+const posts = await response.json();
+
+// Filtrar posts que realmente pertenecen a esta categoría
+const filteredPosts = posts.filter(post => 
+  post.categories?.some(cat => 
+    cat.slug === slug || cat.id === slug
+  )
+);
+
+function parseDate(dateString) {
+  // ... reuse the same date parsing function from index.astro ...
+}
+---
+<BlogLayout title={`Categoría: ${slug}`}>
+  <h1>Artículos en {slug}</h1>
+  
+  {posts.length > 0 ? (
+    posts.map(post => {
+      const postDate = parseDate(post.publishedAt);
+      const formattedDate = postDate 
+        ? postDate.toLocaleDateString('es-ES', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          })
+        : 'Fecha no disponible';
+      
+      return (
+        <article>
+          <h2><a href={`/blog/${post.id}`}>{post.title}</a></h2>
+          <time datetime={post.publishedAt}>{formattedDate}</time>
+          <div style="margin-top: 1rem;" set:html={post.excerpt || post.content.substring(0, 200) + '...'} />
+        </article>
+      );
+    })
+  ) : (
+    <p>No hay artículos en esta categoría</p>
+  )}
+</BlogLayout>

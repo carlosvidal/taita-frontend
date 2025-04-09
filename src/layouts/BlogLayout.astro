@@ -1,0 +1,55 @@
+---
+interface Props {
+  title: string;
+  menuItems?: Array<{
+    label: string;
+    url: string;
+  }>;
+}
+
+const { title, menuItems = [] } = Astro.props;
+---
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>{title}</title>
+  <link rel="stylesheet" href="/styles/global.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="/" style="text-decoration: none;">Home</a>
+      {menuItems.map(item => (
+        <>
+          <span style="margin: 0 0.5em;">·</span>
+          <a href={item.url} style="text-decoration: none;">{item.label}</a>
+        </>
+      ))}
+    </nav>
+  </header>
+  <main>
+    <slot />
+  </main>
+  <footer style="margin-top: 4rem; font-family: var(--font-sans); font-size: 0.9rem; color: var(--text-secondary);">
+    <hr />
+    <p>© {new Date().getFullYear()} Your Name</p>
+  </footer>
+</body>
+</html>
+
+<style>
+  nav {
+    background-color: #f5f5f5;
+    padding: 1rem;
+    margin-bottom: 2rem;
+  }
+  nav a {
+    margin-right: 1rem;
+  }
+</style>

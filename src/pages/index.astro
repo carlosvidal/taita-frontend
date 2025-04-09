@@ -1,11 +1,192 @@
 ---
-import Welcome from '../components/Welcome.astro';
-import Layout from '../layouts/Layout.astro';
+import BlogLayout from '../layouts/BlogLayout.astro';
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+// Keep only one set of API endpoint definitions
+const API_BASE = 'http://localhost:3000/api';
+const POSTS_API = `${API_BASE}/posts`;
+const MENU_API = `${API_BASE}/menu`;
+const CATEGORIES_API = `${API_BASE}/categories`;
+
+// Helper function to handle API responses
+async function fetchAPI(url) {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+    
+    // Debug the response
+    const text = await res.text();
+    console.log(`Response from ${url}:`, text);
+    
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    if (text.startsWith('<!DOCTYPE')) throw new Error('Received HTML instead of JSON');
+    
+    return JSON.parse(text);
+  } catch (error) {
+    console.error(`Failed to fetch ${url}:`, error);
+    return null;
+  }
+}
+
+let posts = [];
+let menuItems = [];
+let categories = [];
+
+try {
+  const [postsData, menuData, categoriesData] = await Promise.all([
+    fetchAPI(POSTS_API),
+    fetchAPI(MENU_API),
+    fetchAPI(CATEGORIES_API)
+  ]);
+  
+  // Debug raw API responses
+  console.log('Posts:', postsData);
+  console.log('Menu:', menuData);
+  console.log('Categories:', categoriesData);
+  
+  // Handle responses
+  posts = postsData || [];
+  menuItems = menuData?.items || menuData || [];
+  categories = categoriesData?.categories || categoriesData || [];
+  
+} catch (error) {
+  console.error('API Error:', error);
+  // Fallback data remains the same
+  menuItems = [
+    { label: 'Inicio', url: '/' },
+    { label: 'Blog', url: '/blog' },
+    { label: 'Acerca', url: '/about' }
+  ];
+  categories = [
+    { name: 'Tecnología', slug: 'tech' },
+    { name: 'Diseño', slug: 'design' }
+  ];
+}
+
+// Date parsing function remains the same
+function parseDate(dateString) {
+  if (!dateString) return null;
+  const date = new Date(dateString);
+  if (!isNaN(date)) return date;
+  const isoDate = new Date(dateString.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'));
+  return isNaN(isoDate) ? null : isoDate;
+}
+
+// Add fallback menu items if API fails
+if (menuItems.length === 0) {
+  menuItems = [
+    { label: 'Inicio', url: '/' },
+    { label: 'Blog', url: '/blog' },
+    { label: 'Acerca', url: '/about' }
+  ];
+}
+
+if (categories.length === 0) {
+  categories = [
+    { name: 'Tecnología', slug: 'tech' },
+    { name: 'Diseño', slug: 'design' }
+  ];
+}
 ---
+<BlogLayout title="Home" menuItems={menuItems}>
+  <div class="content-wrapper">
+    {categories.length > 0 && (
+      <aside class="categories-sidebar">
+        <h2>Categorías</h2>
+        <ul>
+          {categories.map(category => (
+            <li>
+              <a href={`/category/${encodeURIComponent(category.slug || category.id)}`}>
+                {category.name || category.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </aside>
+    )}
 
-<Layout>
-	<Welcome />
-</Layout>
+    <main class="posts-main">
+      <h1>Artículos Recientes</h1>
+      {posts.map(post => {
+        const postDate = parseDate(post.publishedAt);
+        const formattedDate = postDate 
+          ? postDate.toLocaleDateString('es-ES', { 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric' 
+            })
+          : 'Fecha no disponible';
+        
+        return (
+          <article>
+            <h2><a href={`/blog/${post.id}`}>{post.title}</a></h2>
+            <div class="post-meta">
+              <time datetime={post.publishedAt}>
+                Publicado: {formattedDate}
+              </time>
+              {post.updatedAt && post.updatedAt !== post.publishedAt && (
+                <time datetime={post.updatedAt}>
+                  · Actualizado: {parseDate(post.updatedAt)?.toLocaleDateString('es-ES')}
+                </time>
+              )}
+            </div>
+            <div style="margin-top: 1rem;" set:html={post.excerpt || post.content.substring(0, 200) + '...'} />
+          </article>
+        );
+      })}
+    </main>
+  </div>
+</BlogLayout>
+
+<style>
+  .categories-sidebar {
+    background-color: #f0f0f0;
+    padding: 1rem;
+    border: 1px solid #ddd;
+  }
+</style>
+<style>
+  .content-wrapper {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 2rem;
+  }
+
+  .categories-sidebar {
+    position: sticky;
+    top: 2rem;
+    align-self: start;
+  }
+
+  .categories-sidebar ul {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0 0;
+  }
+
+  .categories-sidebar li {
+    margin-bottom: 0.5rem;
+  }
+
+  .categories-sidebar a {
+    text-decoration: none;
+    color: var(--text-secondary);
+  }
+
+  .categories-sidebar a:hover {
+    color: var(--text-primary);
+  }
+
+  @media (max-width: 768px) {
+    .content-wrapper {
+      grid-template-columns: 1fr;
+    }
+    
+    .categories-sidebar {
+      position: static;
+      order: -1;
+    }
+  }
+</style>

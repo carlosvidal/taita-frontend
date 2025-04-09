@@ -1,0 +1,43 @@
+---
+import BlogLayout from '../../layouts/BlogLayout.astro';
+
+// Add this line to enable server-side rendering
+export const prerender = false;
+
+const { id } = Astro.params;
+const response = await fetch(`http://localhost:3000/api/posts/${id}`);
+const post = await response.json();
+
+// Fix date formatting
+// Add this helper function at the top of your frontmatter
+function parseDate(dateString) {
+  if (!dateString) return null;
+  
+  // Try different date formats
+  const date = new Date(dateString);
+  if (!isNaN(date)) return date;
+  
+  // Handle other formats if needed
+  const isoDate = new Date(dateString.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'));
+  return isNaN(isoDate) ? null : isoDate;
+}
+
+// Then update your date formatting
+const postDate = parseDate(post.publishedAt);
+const formattedDate = postDate 
+  ? postDate.toLocaleDateString('es-ES', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    })
+  : 'Fecha no disponible';
+---
+<BlogLayout title={post.title}>
+  <article>
+    <h1>{post.title}</h1>
+    <time datetime={post.publishedAt}>{formattedDate}</time>
+    
+    <!-- Fix HTML rendering -->
+    <div style="margin-top: 2rem;" set:html={post.content} />
+  </article>
+</BlogLayout>
