@@ -4,26 +4,126 @@ import BlogLayout from '../../layouts/BlogLayout.astro';
 // Add this line to enable server-side rendering
 export const prerender = false;
 
-const { id } = Astro.params;
-const response = await fetch(`http://localhost:3000/api/posts/${id}`);
-const post = await response.json();
+// API endpoint definitions
+const API_BASE = 'http://localhost:3000/api';
+const MENU_API = `${API_BASE}/menu`;
+const SETTINGS_API = `${API_BASE}/settings`;
 
-// Fix date formatting
-// Add this helper function at the top of your frontmatter
-function parseDate(dateString) {
-  if (!dateString) return null;
-  
-  // Try different date formats
-  const date = new Date(dateString);
-  if (!isNaN(date)) return date;
-  
-  // Handle other formats if needed
-  const isoDate = new Date(dateString.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'));
-  return isNaN(isoDate) ? null : isoDate;
+// Helper function to handle API responses
+async function fetchAPI(url: string) {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return await res.json();
+  } catch (error) {
+    console.error(`Failed to fetch ${url}:`, error);
+    return null;
+  }
 }
 
-// Then update your date formatting
-const postDate = parseDate(post.publishedAt);
+// Define types
+interface MenuItem {
+  id?: number;
+  uuid?: string;
+  label?: string;
+  url?: string;
+  order?: number;
+  parentId?: number | null;
+}
+
+interface MenuItemForLayout {
+  label: string;
+  url: string;
+  active: boolean;
+}
+
+interface Author {
+  id: number;
+  uuid: string;
+  email: string;
+  name: string;
+  bio?: string;
+  picture?: string;
+  role: string;
+}
+
+interface Post {
+  id: number;
+  title: string;
+  content: string;
+  excerpt?: string;
+  createdAt: string;
+  updatedAt?: string;
+  publishedAt?: string;
+  image?: string;
+  author?: Author;
+  category?: {
+    id: number;
+    name: string;
+    slug: string;
+  };
+}
+
+interface Settings {
+  title?: string;
+  description?: string;
+}
+
+// Get post data
+const { id } = Astro.params;
+const postResponse = await fetch(`${API_BASE}/posts/${id}`);
+const post = await postResponse.json();
+
+// Get menu and settings
+const [menuData, settingsData] = await Promise.all([
+  fetchAPI(MENU_API),
+  fetchAPI(SETTINGS_API)
+]);
+
+// Process menu items
+let menuItems: MenuItem[] = menuData || [];
+let mappedMenuItems: MenuItemForLayout[] = [];
+
+// Map menu items to the format expected by BlogLayout
+mappedMenuItems = menuItems.map((item: MenuItem): MenuItemForLayout => ({
+  label: item.label || 'Link',
+  url: item.url || '/',
+  active: false
+}));
+
+// Add fallback menu items if API fails
+if (mappedMenuItems.length === 0) {
+  mappedMenuItems = [
+    { label: 'Home', url: '/', active: false },
+    { label: 'Features', url: '/features', active: false },
+    { label: 'Portfolio', url: '/portfolio', active: false },
+    { label: 'About Me', url: '/about', active: false },
+    { label: 'Contact', url: '/contact', active: false }
+  ];
+}
+
+// Helper function to parse dates safely
+function parseDate(dateString: string | undefined): Date | null {
+  if (!dateString) return null;
+  
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      return null;
+    }
+    return date;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Format date for display
+const postDate = parseDate(post.publishedAt || post.createdAt);
 const formattedDate = postDate 
   ? postDate.toLocaleDateString('es-ES', { 
       year: 'numeric', 
@@ -32,12 +132,266 @@ const formattedDate = postDate
     })
   : 'Fecha no disponible';
 ---
-<BlogLayout title={post.title}>
-  <article>
-    <h1>{post.title}</h1>
-    <time datetime={post.publishedAt}>{formattedDate}</time>
+<BlogLayout 
+  title={post.title}
+  description={settingsData?.description || '... a minimalistic theme focused on readability.'}
+  blogTitle={settingsData?.title || 'Read'}
+  menuItems={mappedMenuItems}
+>
+  <article class="post">
+    <header class="post-header">
+      <h1 class="post-title">{post.title}</h1>
+      
+      <div class="post-meta">
+        <time datetime={post.publishedAt || post.createdAt}>{formattedDate}</time>
+        
+        {post.category && (
+          <span class="post-categories">
+            <a href={`/category/${post.category.slug}`}>
+              {post.category.name}
+            </a>
+          </span>
+        )}
+      </div>
+    </header>
     
-    <!-- Fix HTML rendering -->
-    <div style="margin-top: 2rem;" set:html={post.content} />
+    {post.image && (
+      <div class="post-featured-image">
+        <img src={`http://localhost:3000/${post.image}`} alt={post.title} loading="lazy" />
+      </div>
+    )}
+    
+    <div class="post-content" set:html={post.content} />
+    
+    {post.author && (
+      <div class="author-profile">
+        <div class="author-header">
+          <div class="author-avatar">
+            {post.author.picture ? (
+              <img 
+                src={`http://localhost:3000/${post.author.picture}`} 
+                alt={post.author.name} 
+                loading="lazy" 
+              />
+            ) : (
+              <div class="author-avatar-placeholder">
+                {post.author.name.charAt(0)}
+              </div>
+            )}
+          </div>
+          <div class="author-info">
+            <h3 class="author-name">{post.author.name}</h3>
+            {post.author.role && <span class="author-role">{post.author.role}</span>}
+          </div>
+        </div>
+        {post.author.bio && <p class="author-bio">{post.author.bio}</p>}
+      </div>
+    )}
+    
+    <div class="post-navigation">
+      <a href="/" class="read-more">&larr; Volver a la página principal</a>
+    </div>
   </article>
 </BlogLayout>
+
+<style>
+  .post {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem 0;
+  }
+  
+  .post-header {
+    margin-bottom: 2rem;
+    text-align: center;
+  }
+  
+  .post-title {
+    font-family: var(--serif-font);
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    line-height: 1.2;
+    color: var(--heading-color);
+  }
+  
+  .post-meta {
+    font-family: var(--sans-font);
+    font-size: 1rem;
+    color: var(--secondary-text-color);
+    margin-bottom: 1rem;
+  }
+  
+  .post-categories a {
+    display: inline-block;
+    margin-left: 0.5rem;
+    color: var(--accent-color);
+    text-decoration: none;
+  }
+  
+  .post-featured-image {
+    margin: 2rem 0;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  }
+  
+  .post-featured-image img {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  
+  .post-content {
+    font-family: var(--sans-font);
+    font-size: 1.1rem;
+    line-height: 1.8;
+    color: var(--text-color);
+    margin-bottom: 3rem;
+  }
+  
+  .post-content p {
+    margin-bottom: 1.5rem;
+  }
+  
+  .post-content h2 {
+    font-family: var(--serif-font);
+    font-size: 1.8rem;
+    margin: 2.5rem 0 1rem;
+    color: var(--heading-color);
+  }
+  
+  .post-content h3 {
+    font-family: var(--serif-font);
+    font-size: 1.5rem;
+    margin: 2rem 0 1rem;
+    color: var(--heading-color);
+  }
+  
+  .post-content blockquote {
+    border-left: 4px solid var(--accent-color);
+    padding-left: 1.5rem;
+    margin: 2rem 0;
+    font-style: italic;
+    color: var(--secondary-text-color);
+  }
+  
+  .post-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    margin: 1.5rem 0;
+  }
+  
+  .post-content a {
+    color: var(--accent-color);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+  
+  .post-content a:hover {
+    color: var(--accent-color-dark);
+  }
+  
+  .author-profile {
+    margin-top: 3rem;
+    padding: 2rem;
+    border-radius: 8px;
+    background-color: var(--card-bg-color, #f9f9f9);
+    border: 1px solid var(--border-color, #eee);
+  }
+  
+  .author-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+  
+  .author-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    overflow: hidden;
+    margin-right: 1.5rem;
+    background-color: var(--accent-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .author-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  .author-avatar-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--serif-font);
+    font-size: 2rem;
+    color: white;
+  }
+  
+  .author-info {
+    flex: 1;
+  }
+  
+  .author-name {
+    font-family: var(--serif-font);
+    font-size: 1.5rem;
+    margin: 0 0 0.25rem;
+    color: var(--heading-color);
+  }
+  
+  .author-role {
+    font-family: var(--sans-font);
+    font-size: 0.9rem;
+    color: var(--secondary-text-color);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  
+  .author-bio {
+    font-family: var(--sans-font);
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--text-color);
+    margin: 0;
+  }
+  
+  .post-navigation {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border-color);
+    font-family: var(--sans-font);
+  }
+  
+  .read-more {
+    color: var(--accent-color);
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.2s ease;
+  }
+  
+  .read-more:hover {
+    color: var(--accent-color-dark);
+  }
+  
+  @media (max-width: 768px) {
+    .post {
+      padding: 1rem 0;
+    }
+    
+    .post-title {
+      font-size: 2rem;
+    }
+    
+    .post-content {
+      font-size: 1rem;
+    }
+  }
+</style>

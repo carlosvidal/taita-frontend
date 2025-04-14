@@ -3,44 +3,321 @@ import BlogLayout from '../../layouts/BlogLayout.astro';
 
 export const prerender = false;
 
+// API endpoint definitions
+const API_BASE = 'http://localhost:3000/api';
+const MENU_API = `${API_BASE}/menu`;
+const SETTINGS_API = `${API_BASE}/settings`;
+const CATEGORIES_API = `${API_BASE}/categories`;
+
+// Helper function to handle API responses
+async function fetchAPI(url: string) {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    return await res.json();
+  } catch (error) {
+    console.error(`Failed to fetch ${url}:`, error);
+    return null;
+  }
+}
+
+// Define types
+interface Post {
+  id: number;
+  title: string;
+  content: string;
+  excerpt?: string;
+  createdAt: string;
+  updatedAt?: string;
+  publishedAt?: string;
+  image?: string;
+  category?: {
+    id: number;
+    name: string;
+    slug: string;
+  };
+}
+
+interface MenuItem {
+  id?: number;
+  uuid?: string;
+  label?: string;
+  url?: string;
+  order?: number;
+  parentId?: number | null;
+}
+
+interface MenuItemForLayout {
+  label: string;
+  url: string;
+  active: boolean;
+}
+
+interface Settings {
+  title?: string;
+  description?: string;
+}
+
+interface Category {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+// Get category data
 const { slug } = Astro.params;
-const response = await fetch(`http://localhost:3000/api/posts?category=${encodeURIComponent(slug)}`);
-const posts = await response.json();
+const postsResponse = await fetch(`${API_BASE}/posts?category=${encodeURIComponent(slug)}`);
+const posts = await postsResponse.json();
 
-// Filtrar posts que realmente pertenecen a esta categoría
-const filteredPosts = posts.filter(post => 
-  post.categories?.some(cat => 
-    cat.slug === slug || cat.id === slug
-  )
-);
+// Get category info
+const categoryResponse = await fetch(`${API_BASE}/categories/${slug}`);
+let categoryData;
+try {
+  categoryData = await categoryResponse.json();
+} catch (e) {
+  categoryData = { name: slug };
+}
 
-function parseDate(dateString) {
-  // ... reuse the same date parsing function from index.astro ...
+// Get menu and settings
+const [menuData, settingsData] = await Promise.all([
+  fetchAPI(MENU_API),
+  fetchAPI(SETTINGS_API)
+]);
+
+// Process menu items
+let menuItems: MenuItem[] = menuData || [];
+let mappedMenuItems: MenuItemForLayout[] = [];
+
+// Map menu items to the format expected by BlogLayout
+mappedMenuItems = menuItems.map((item: MenuItem): MenuItemForLayout => ({
+  label: item.label || 'Link',
+  url: item.url || '/',
+  active: item.url === `/category/${slug ? slug.toString() : ''}` || false
+}));
+
+// Add fallback menu items if API fails
+if (mappedMenuItems.length === 0) {
+  mappedMenuItems = [
+    { label: 'Home', url: '/', active: false },
+    { label: 'Categories', url: '/categories', active: true },
+    { label: 'About', url: '/about', active: false }
+  ];
+}
+
+// Helper function to parse dates safely
+function parseDate(dateString: string | undefined): Date | null {
+  if (!dateString) return null;
+  
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      return null;
+    }
+    return date;
+  } catch (e) {
+    return null;
+  }
 }
 ---
-<BlogLayout title={`Categoría: ${slug}`}>
-  <h1>Artículos en {slug}</h1>
+<BlogLayout 
+  title={`${categoryData.name || slug} - ${settingsData?.title || 'Read Blog'}`}
+  description={settingsData?.description || '... a minimalistic theme focused on readability.'}
+  blogTitle={settingsData?.title || 'Read'}
+  menuItems={mappedMenuItems}
+>
+  <div class="category-header">
+    <h1 class="category-title">{categoryData.name || slug}</h1>
+    <p class="category-description">Artículos en esta categoría</p>
+  </div>
   
-  {posts.length > 0 ? (
-    posts.map(post => {
-      const postDate = parseDate(post.publishedAt);
-      const formattedDate = postDate 
-        ? postDate.toLocaleDateString('es-ES', { 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-          })
-        : 'Fecha no disponible';
-      
-      return (
-        <article>
-          <h2><a href={`/blog/${post.id}`}>{post.title}</a></h2>
-          <time datetime={post.publishedAt}>{formattedDate}</time>
-          <div style="margin-top: 1rem;" set:html={post.excerpt || post.content.substring(0, 200) + '...'} />
-        </article>
-      );
-    })
-  ) : (
-    <p>No hay artículos en esta categoría</p>
-  )}
+  <div class="posts-grid">
+    {posts.length > 0 ? (
+      posts.map((post: Post) => {
+        const postDate = parseDate(post.publishedAt || post.createdAt);
+        const formattedDate = postDate 
+          ? postDate.toLocaleDateString('es-ES', { 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric' 
+            })
+          : 'Fecha no disponible';
+        
+        return (
+          <article class="post-card">
+            <header class="post-card-header">
+              <h2 class="post-card-title">
+                <a href={`/blog/${post.id}`}>{post.title}</a>
+              </h2>
+              <div class="post-card-meta">
+                <time datetime={post.publishedAt || post.createdAt}>{formattedDate}</time>
+              </div>
+            </header>
+            
+            {post.image && (
+              <div class="post-card-image">
+                <a href={`/blog/${post.id}`}>
+                  <img src={`http://localhost:3000/${post.image}`} alt={post.title} loading="lazy" />
+                </a>
+              </div>
+            )}
+            
+            <div class="post-card-excerpt">
+              {post.excerpt ? (
+                <p>{post.excerpt}</p>
+              ) : (
+                <p>{post.content.replace(/<[^>]*>/g, '').substring(0, 150)}...</p>
+              )}
+            </div>
+            
+            <a href={`/blog/${post.id}`} class="read-more">Leer más &rarr;</a>
+          </article>
+        );
+      })
+    ) : (
+      <div class="no-posts">
+        <p>No hay artículos en esta categoría</p>
+        <a href="/" class="button">Volver a la página principal</a>
+      </div>
+    )}
+  </div>
 </BlogLayout>
+
+<style>
+  .category-header {
+    text-align: center;
+    margin-bottom: 3rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  .category-title {
+    font-family: var(--serif-font);
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--heading-color);
+  }
+  
+  .category-description {
+    font-family: var(--sans-font);
+    color: var(--secondary-text-color);
+    font-size: 1.1rem;
+  }
+  
+  .posts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 2rem;
+  }
+  
+  .post-card {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--card-bg-color, #fff);
+    border: 1px solid var(--border-color, #eee);
+    border-radius: 8px;
+    padding: 1.5rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  
+  .post-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+  }
+  
+  .post-card-title {
+    font-family: var(--serif-font);
+    font-size: 1.5rem;
+    margin-bottom: 0.75rem;
+    line-height: 1.3;
+  }
+  
+  .post-card-title a {
+    color: var(--heading-color);
+    text-decoration: none;
+  }
+  
+  .post-card-title a:hover {
+    color: var(--accent-color);
+  }
+  
+  .post-card-meta {
+    font-family: var(--sans-font);
+    font-size: 0.9rem;
+    color: var(--secondary-text-color);
+    margin-bottom: 1rem;
+  }
+  
+  .post-card-image {
+    margin: 1rem 0;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  
+  .post-card-image img {
+    width: 100%;
+    height: auto;
+    display: block;
+    transition: transform 0.3s ease;
+  }
+  
+  .post-card-image:hover img {
+    transform: scale(1.03);
+  }
+  
+  .post-card-excerpt {
+    font-family: var(--sans-font);
+    color: var(--text-color);
+    margin-bottom: 1.5rem;
+    flex-grow: 1;
+  }
+  
+  .read-more {
+    font-family: var(--sans-font);
+    color: var(--accent-color);
+    text-decoration: none;
+    font-weight: 600;
+    align-self: flex-start;
+    transition: color 0.2s ease;
+  }
+  
+  .read-more:hover {
+    color: var(--accent-color-dark);
+  }
+  
+  .no-posts {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 3rem;
+    background-color: var(--card-bg-color, #fff);
+    border: 1px solid var(--border-color, #eee);
+    border-radius: 8px;
+  }
+  
+  .button {
+    display: inline-block;
+    background-color: var(--accent-color);
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 4px;
+    text-decoration: none;
+    font-family: var(--sans-font);
+    font-weight: 600;
+    margin-top: 1rem;
+    transition: background-color 0.2s ease;
+  }
+  
+  .button:hover {
+    background-color: var(--accent-color-dark);
+  }
+  
+  @media (max-width: 768px) {
+    .posts-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

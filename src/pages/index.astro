@@ -1,14 +1,15 @@
 ---
 import BlogLayout from '../layouts/BlogLayout.astro';
 
-// Keep only one set of API endpoint definitions
+// API endpoint definitions
 const API_BASE = 'http://localhost:3000/api';
 const POSTS_API = `${API_BASE}/posts`;
 const MENU_API = `${API_BASE}/menu`;
 const CATEGORIES_API = `${API_BASE}/categories`;
+const SETTINGS_API = `${API_BASE}/settings`;
 
 // Helper function to handle API responses
-async function fetchAPI(url) {
+async function fetchAPI(url: string) {
   try {
     const res = await fetch(url, {
       headers: {
@@ -30,25 +31,80 @@ async function fetchAPI(url) {
   }
 }
 
-let posts = [];
-let menuItems = [];
-let categories = [];
+// Definir tipos para mejorar el tipado
+interface Post {
+  id: number;
+  title: string;
+  content: string;
+  excerpt?: string;
+  createdAt: string;
+  updatedAt?: string;
+  publishedAt?: string;
+  image?: string;
+  category?: {
+    id: number;
+    name: string;
+    slug: string;
+  };
+}
+
+interface MenuItem {
+  id?: number;
+  uuid?: string;
+  label?: string;
+  url?: string;
+  order?: number;
+  parentId?: number | null;
+}
+
+interface Category {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+interface Settings {
+  title?: string;
+  description?: string;
+}
+
+interface MenuItemForLayout {
+  label: string;
+  url: string;
+  active: boolean;
+}
+
+let posts: Post[] = [];
+let menuItems: MenuItem[] = [];
+let categories: Category[] = [];
+let settingsData: Settings | null = null;
+let mappedMenuItems: MenuItemForLayout[] = [];
 
 try {
-  const [postsData, menuData, categoriesData] = await Promise.all([
+  const [postsData, menuData, categoriesData, settingsResponse] = await Promise.all([
     fetchAPI(POSTS_API),
     fetchAPI(MENU_API),
-    fetchAPI(CATEGORIES_API)
+    fetchAPI(CATEGORIES_API),
+    fetchAPI(SETTINGS_API)
   ]);
   
   // Debug raw API responses
   console.log('Posts:', postsData);
   console.log('Menu:', menuData);
   console.log('Categories:', categoriesData);
+  console.log('Settings:', settingsResponse);
   
   // Handle responses
   posts = postsData || [];
-  menuItems = menuData?.items || menuData || [];
+  menuItems = menuData || [];
+  settingsData = settingsResponse || {};
+  
+  // Mapear los elementos del menú al formato esperado por BlogLayout
+  mappedMenuItems = menuItems.map((item: any): MenuItemForLayout => ({
+    label: item.label || item.title || item.name || 'Link',
+    url: item.url || `/${item.slug || ''}`,
+    active: item.url === '/' || false // No podemos usar window en SSR
+  }));
   categories = categoriesData?.categories || categoriesData || [];
   
 } catch (error) {
@@ -65,78 +121,105 @@ try {
   ];
 }
 
-// Date parsing function remains the same
-function parseDate(dateString) {
+// Helper function to parse dates safely
+function parseDate(dateString: string | undefined): Date | null {
   if (!dateString) return null;
-  const date = new Date(dateString);
-  if (!isNaN(date)) return date;
-  const isoDate = new Date(dateString.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1'));
-  return isNaN(isoDate) ? null : isoDate;
+  
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      return null;
+    }
+    return date;
+  } catch (e) {
+    return null;
+  }
 }
 
 // Add fallback menu items if API fails
 if (menuItems.length === 0) {
-  menuItems = [
-    { label: 'Inicio', url: '/' },
-    { label: 'Blog', url: '/blog' },
-    { label: 'Acerca', url: '/about' }
+  // Crear directamente los elementos mapeados para el layout
+  mappedMenuItems = [
+    { label: 'Home', url: '/', active: true },
+    { label: 'Categories', url: '/categories', active: false },
+    { label: 'About', url: '/about', active: false },
+    { label: 'Contact', url: '/contact', active: false }
   ];
 }
 
 if (categories.length === 0) {
   categories = [
-    { name: 'Tecnología', slug: 'tech' },
-    { name: 'Diseño', slug: 'design' }
+    { id: 1, name: 'Technology', slug: 'technology' },
+    { id: 2, name: 'Lifestyle', slug: 'lifestyle' },
+    { id: 3, name: 'Travel', slug: 'travel' }
   ];
 }
+
 ---
-<BlogLayout title="Home" menuItems={menuItems}>
+<BlogLayout 
+  title={settingsData?.title || 'Mi Blog'}
+  description={settingsData?.description || '... a minimalistic theme focused on readability.'}
+  blogTitle={settingsData?.title || 'Read'}
+  menuItems={mappedMenuItems}
+>
   <div class="content-wrapper">
     {categories.length > 0 && (
-      <aside class="categories-sidebar">
+      <section class="categories-section">
         <h2>Categorías</h2>
-        <ul>
+        <ul class="categories-list">
           {categories.map(category => (
             <li>
-              <a href={`/category/${encodeURIComponent(category.slug || category.id)}`}>
-                {category.name || category.title}
-              </a>
+              <a href={`/category/${category.slug}`}>{category.name}</a>
             </li>
           ))}
         </ul>
-      </aside>
+      </section>
     )}
 
-    <main class="posts-main">
-      <h1>Artículos Recientes</h1>
-      {posts.map(post => {
-        const postDate = parseDate(post.publishedAt);
-        const formattedDate = postDate 
-          ? postDate.toLocaleDateString('es-ES', { 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
-            })
-          : 'Fecha no disponible';
-        
-        return (
-          <article>
-            <h2><a href={`/blog/${post.id}`}>{post.title}</a></h2>
-            <div class="post-meta">
-              <time datetime={post.publishedAt}>
-                Publicado: {formattedDate}
-              </time>
-              {post.updatedAt && post.updatedAt !== post.publishedAt && (
-                <time datetime={post.updatedAt}>
-                  · Actualizado: {parseDate(post.updatedAt)?.toLocaleDateString('es-ES')}
-                </time>
+    <div class="posts-container">
+      {posts.length > 0 ? (
+        <div>
+          {posts.map(post => (
+            <article class="post">
+              <header class="post-header">
+                <h2 class="post-title"><a href={`/blog/${post.id}`}>{post.title}</a></h2>
+                <div class="post-meta">
+                  {new Date(post.createdAt).toLocaleDateString('es-ES', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                  
+                  {post.category && (
+                    <span class="post-categories">
+                      <a href={`/category/${post.category.slug}`}>
+                        {post.category.name}
+                      </a>
+                    </span>
+                  )}
+                </div>
+              </header>
+              
+              {post.image && (
+                <div class="post-image">
+                  <a href={`/blog/${post.id}`}>
+                    <img src={`http://localhost:3000/${post.image}`} alt={post.title} loading="lazy" />
+                  </a>
+                </div>
               )}
-            </div>
-            <div style="margin-top: 1rem;" set:html={post.excerpt || post.content.substring(0, 200) + '...'} />
-          </article>
-        );
-      })}
-    </main>
+              
+              <div class="post-excerpt">
+                {post.excerpt || post.content.substring(0, 250) + '...'}
+              </div>
+              
+              <a href={`/blog/${post.id}`} class="read-more">Seguir leyendo →</a>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p>No posts found.</p>
+      )}
+    </div>
   </div>
 </BlogLayout>
 
@@ -177,6 +260,30 @@ if (categories.length === 0) {
 
   .categories-sidebar a:hover {
     color: var(--text-primary);
+  }
+
+  .post-image {
+    margin: 1.5rem 0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  
+  .post-image img {
+    width: 100%;
+    height: auto;
+    display: block;
+    transition: transform 0.3s ease;
+  }
+  
+  .post-image:hover img {
+    transform: scale(1.02);
+  }
+  
+  .post-excerpt {
+    margin-bottom: 1.5rem;
+    font-family: var(--sans-font);
+    color: var(--text-color);
+    line-height: 1.6;
   }
 
   @media (max-width: 768px) {
