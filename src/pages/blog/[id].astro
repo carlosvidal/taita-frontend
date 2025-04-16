@@ -1,5 +1,7 @@
 ---
 import BlogLayout from '../../layouts/BlogLayout.astro';
+import CommentsList from '../../components/CommentsList.astro';
+
 
 // Add this line to enable server-side rendering
 export const prerender = false;
@@ -79,6 +81,10 @@ const { id } = Astro.params;
 const postResponse = await fetch(`${API_BASE}/posts/${id}`);
 const post = await postResponse.json();
 
+// Fetch approved comments SSR
+const commentsRes = await fetch(`${API_BASE}/comments?postId=${post.id}&status=APPROVED`);
+const comments = commentsRes.ok ? await commentsRes.json() : [];
+
 // Get menu and settings
 const [menuData, settingsData] = await Promise.all([
   fetchAPI(MENU_API),
@@ -141,6 +147,8 @@ const formattedDate = postDate
   <article class="post">
     <header class="post-header">
       <h1 class="post-title">{post.title}</h1>
+
+
       
       <div class="post-meta">
         <time datetime={post.publishedAt || post.createdAt}>{formattedDate}</time>
@@ -162,6 +170,10 @@ const formattedDate = postDate
     )}
     
     <div class="post-content" set:html={post.content} />
+
+    <div class="post-navigation">
+      <a href="/" class="read-more">&larr; Volver a la página principal</a>
+    </div>
     
     {post.author && (
       <div class="author-profile">
@@ -187,10 +199,14 @@ const formattedDate = postDate
         {post.author.bio && <p class="author-bio">{post.author.bio}</p>}
       </div>
     )}
+
+    <CommentsList comments={comments} />
+    <!-- Formulario de comentarios -->
+    <script type="module" src="/src/components/CommentForm.js" client:load></script>
+    <comment-form post-id={post.id} api-base={API_BASE}></comment-form>
     
-    <div class="post-navigation">
-      <a href="/" class="read-more">&larr; Volver a la página principal</a>
-    </div>
+    
+   
   </article>
 </BlogLayout>
 

@@ -1,0 +1,46 @@
+---
+// Props
+const { comments = [] } = Astro.props;
+---
+<section class="comments-list-section">
+  <h3>Comentarios</h3>
+  {comments.length === 0 ? (
+    <p>No hay comentarios aún.</p>
+  ) : (
+    <ul class="comments-list">
+      {comments.map(comment => (
+        <li class="comment-item" id={`comment-${comment.uuid}`}> 
+          <div class="comment-author"><strong>{comment.authorName}</strong></div>
+          <div class="comment-content">{comment.content}</div>
+          <div class="comment-date">{new Date(comment.createdAt).toLocaleString()}</div>
+        </li>
+      ))}
+    </ul>
+  )}
+</section>
+
+<style>
+.comments-list-section {
+  margin-top: 3rem;
+  margin-bottom: 2rem;
+}
+.comments-list {
+  list-style: none;
+  padding: 0;
+}
+.comment-item {
+  border-bottom: 1px solid #eee;
+  padding: 1rem 0;
+}
+.comment-author {
+  color: #333;
+  font-weight: bold;
+}
+.comment-content {
+  margin: 0.5rem 0 0.2rem 0;
+}
+.comment-date {
+  color: #888;
+  font-size: 0.9em;
+}
+</style>
