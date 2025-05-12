@@ -5,8 +5,9 @@ import netlify from '@astrojs/netlify';
 // https://astro.build/config
 export default defineConfig({
   output: 'server',
-  adapter: netlify({
-    // Deshabilitar las sesiones para evitar el error
-    blobsSession: false
-  }),
+  experimental: {
+    // Habilitar la bandera experimental de sesiones
+    session: true
+  },
+  adapter: netlify(),
 });
