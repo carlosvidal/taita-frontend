@@ -4,7 +4,8 @@ import BlogLayout from '../../layouts/BlogLayout.astro';
 export const prerender = false;
 
 // API endpoint definitions
-const API_BASE = 'http://localhost:3000/api';
+// Usar la URL de la API desplegada en Render
+const API_BASE = import.meta.env.API_URL || 'https://taita-api.onrender.com/api';
 const MENU_API = `${API_BASE}/menu`;
 const SETTINGS_API = `${API_BASE}/settings`;
 const CATEGORIES_API = `${API_BASE}/categories`;
@@ -71,11 +72,12 @@ interface Category {
 
 // Get category data
 const { slug } = Astro.params;
-const postsResponse = await fetch(`${API_BASE}/posts?category=${encodeURIComponent(slug)}`);
-const posts = await postsResponse.json();
+const categorySlug = slug || '';
+const postsResponse = await fetch(`${API_BASE}/posts?category=${encodeURIComponent(categorySlug)}`);
+const posts = await postsResponse.json() as Post[];
 
 // Get category info
-const categoryResponse = await fetch(`${API_BASE}/categories/${slug}`);
+const categoryResponse = await fetch(`${API_BASE}/categories/${categorySlug}`);
 let categoryData;
 try {
   categoryData = await categoryResponse.json();
@@ -161,7 +163,7 @@ function parseDate(dateString: string | undefined): Date | null {
             {post.image && (
               <div class="post-card-image">
                 <a href={`/blog/${post.id}`}>
-                  <img src={`http://localhost:3000/${post.image}`} alt={post.title} loading="lazy" />
+                  <img src={`https://taita-api.onrender.com/${post.image}`} alt={post.title} loading="lazy" />
                 </a>
               </div>
             )}

@@ -2,7 +2,8 @@
 import BlogLayout from '../layouts/BlogLayout.astro';
 
 // API endpoint definitions
-const API_BASE = 'http://localhost:3000/api';
+// Usar la URL de la API desplegada en Render
+const API_BASE = import.meta.env.API_URL || 'https://taita-api.onrender.com/api';
 const POSTS_API = `${API_BASE}/posts`;
 const MENU_API = `${API_BASE}/menu`;
 const CATEGORIES_API = `${API_BASE}/categories`;
@@ -116,8 +117,8 @@ try {
     { label: 'Acerca', url: '/about' }
   ];
   categories = [
-    { name: 'Tecnología', slug: 'tech' },
-    { name: 'Diseño', slug: 'design' }
+    { id: 1, name: 'Tecnología', slug: 'tech' },
+    { id: 2, name: 'Diseño', slug: 'design' }
   ];
 }
 
@@ -203,7 +204,7 @@ if (categories.length === 0) {
               {post.image && (
                 <div class="post-image">
                   <a href={`/blog/${post.id}`}>
-                    <img src={`http://localhost:3000/${post.image}`} alt={post.title} loading="lazy" />
+                    <img src={`https://taita-api.onrender.com/${post.image}`} alt={post.title} loading="lazy" />
                   </a>
                 </div>
               )}

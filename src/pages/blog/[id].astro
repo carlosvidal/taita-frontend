@@ -7,7 +7,8 @@ import CommentsList from '../../components/CommentsList.astro';
 export const prerender = false;
 
 // API endpoint definitions
-const API_BASE = 'http://localhost:3000/api';
+// Usar la URL de la API desplegada en Render
+const API_BASE = import.meta.env.API_URL || 'https://taita-api.onrender.com/api';
 const MENU_API = `${API_BASE}/menu`;
 const SETTINGS_API = `${API_BASE}/settings`;
 
@@ -165,7 +166,7 @@ const formattedDate = postDate
     
     {post.image && (
       <div class="post-featured-image">
-        <img src={`http://localhost:3000/${post.image}`} alt={post.title} loading="lazy" />
+        <img src={`https://taita-api.onrender.com/${post.image}`} alt={post.title} loading="lazy" />
       </div>
     )}
     
@@ -181,7 +182,7 @@ const formattedDate = postDate
           <div class="author-avatar">
             {post.author.picture ? (
               <img 
-                src={`http://localhost:3000/${post.author.picture}`} 
+                src={`https://taita-api.onrender.com/${post.author.picture}`} 
                 alt={post.author.name} 
                 loading="lazy" 
               />
@@ -202,7 +203,7 @@ const formattedDate = postDate
 
     <CommentsList comments={comments} />
     <!-- Formulario de comentarios -->
-    <script type="module" src="/src/components/CommentForm.js" client:load></script>
+    <script type="module" src="/src/components/CommentForm.js"></script>
     <comment-form post-id={post.id} api-base={API_BASE}></comment-form>
     
     

@@ -25,7 +25,7 @@ class CommentFormElement extends HTMLElement {
   }
 
   connectedCallback() {
-    this.apiBase = this.getAttribute("api-base") || "http://localhost:3000/api";
+    this.apiBase = this.getAttribute("api-base") || "https://taita-api.onrender.com/api";
     this.postId = this.getAttribute("post-id");
     this.render();
     this.resolveNumericPostId();
