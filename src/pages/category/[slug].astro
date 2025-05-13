@@ -1,7 +1,34 @@
 ---
 import BlogLayout from '../../layouts/BlogLayout.astro';
 
-export const prerender = false;
+export const prerender = true;
+
+// Generar rutas estáticas para cada categoría
+export async function getStaticPaths() {
+  // Usar la URL de la API desplegada en Render
+  const API_BASE = import.meta.env.API_URL || 'https://taita-api.onrender.com/api';
+  const CATEGORIES_API = `${API_BASE}/categories`;
+  
+  try {
+    const response = await fetch(CATEGORIES_API);
+    const categoriesData = await response.json();
+    const categories = categoriesData?.categories || categoriesData || [] as Category[];
+    
+    return categories.map((category: Category) => ({
+      params: { slug: category.slug },
+      props: { category }
+    }));
+  } catch (error) {
+    console.error('Error fetching categories for static paths:', error);
+    // Fallback para desarrollo: al menos generar rutas para algunas categorías comunes
+    return [
+      { params: { slug: 'tecnologia' } },
+      { params: { slug: 'diseno' } },
+      { params: { slug: 'noticias' } },
+      { params: { slug: 'vida' } }
+    ];
+  }
+}
 
 // API endpoint definitions
 // Usar la URL de la API desplegada en Render
@@ -99,7 +126,7 @@ let mappedMenuItems: MenuItemForLayout[] = [];
 mappedMenuItems = menuItems.map((item: MenuItem): MenuItemForLayout => ({
   label: item.label || 'Link',
   url: item.url || '/',
-  active: item.url === `/category/${slug ? slug.toString() : ''}` || false
+  active: item.url === `/category/${categorySlug}` || false
 }));
 
 // Add fallback menu items if API fails
