@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: taita-frontend
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: node ./dist/server/entry.mjs
+    envVars:
+      - key: API_URL
+        value: https://taita-api.onrender.com/api
+      - key: IMAGE_BASE_URL
+        value: https://taita-api.onrender.com
