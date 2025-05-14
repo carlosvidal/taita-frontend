@@ -4,7 +4,7 @@ import BlogLayout from '../layouts/BlogLayout.astro';
 // API endpoint definitions
 // Usar la URL de la API desplegada en Render
 const API_BASE = import.meta.env.API_URL || 'https://taita-api.onrender.com/api';
-const POSTS_API = `${API_BASE}/posts/public`;
+const POSTS_API = `${API_BASE}/public/posts`; // Endpoint público sin autenticación
 const MENU_API = `${API_BASE}/menu`;
 const CATEGORIES_API = `${API_BASE}/categories`;
 const SETTINGS_API = `${API_BASE}/settings`;
