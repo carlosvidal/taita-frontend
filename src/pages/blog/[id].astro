@@ -1,6 +1,8 @@
 ---
 import BlogLayout from '../../layouts/BlogLayout.astro';
 
+// Configuración para renderizado en el servidor
+
 // Definir la interfaz para el tipo Post
 interface Post {
   id: number;
@@ -43,7 +45,7 @@ interface Settings {
   description: string;
 }
 
-export const prerender = true;
+export const prerender = false;
 
 // Generar rutas estáticas para cada post
 export function getStaticPaths() {

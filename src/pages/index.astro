@@ -1,6 +1,9 @@
 ---
 import BlogLayout from '../layouts/BlogLayout.astro';
 
+// Configuración para renderizado en el servidor
+export const prerender = false;
+
 // API endpoint definitions
 // Usar la URL de la API desplegada en Render
 const API_BASE = import.meta.env.API_URL || 'https://taita-api.onrender.com/api';

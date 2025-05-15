@@ -1,9 +1,11 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
+import node from '@astrojs/node';
 
 // https://astro.build/config
 export default defineConfig({
-  output: 'static',
-  // No necesitamos un adaptador para sitios estáticos
-  // No necesitamos la bandera experimental de sesiones para sitios estáticos
+  output: 'server',
+  adapter: node({
+    mode: 'standalone'
+  }),
 });
