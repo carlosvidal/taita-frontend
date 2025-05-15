@@ -1,6 +1,7 @@
 ---
 import BlogLayout from '../../layouts/BlogLayout.astro';
 import { getTenantInfo, fetchTenantData } from '../../utils/tenant.js';
+import { api } from '../../utils/api.js';
 
 export const prerender = false;
 
@@ -18,12 +19,21 @@ let comments = [];
 let errorMessages = [];
 
 try {
+  // Configurar cliente API con la información del tenant
+  const apiClient = new api.constructor();
+  
+  // Sobreescribir el método getHostInfo para usar la información del tenant
+  apiClient.getHostInfo = () => ({
+    host: tenantInfo.host,
+    subdomain: tenantInfo.subdomain
+  });
+  
   // Fetch post, menu, settings in parallel
   console.log('slug.astro - Iniciando fetch de datos para post:', slug);
   const [postData, menuData, settingsData] = await Promise.all([
-    fetchTenantData(`/posts/public/slug/${slug}`, tenantInfo),
-    fetchTenantData('/menu/public', tenantInfo),
-    fetchTenantData('/settings/public', tenantInfo)
+    apiClient.fetch(`/posts/public/slug/${slug}`),
+    apiClient.fetch('/menu/public'),
+    apiClient.fetch('/settings/public')
   ]);
   
   console.log('slug.astro - Respuesta del post:', typeof postData, Array.isArray(postData) ? postData.length : 'no es array');
@@ -35,6 +45,26 @@ try {
     if (Array.isArray(postData) && postData.length > 0) {
       post = postData[0];
       console.log('slug.astro - Post encontrado en array:', post.id, post.title);
+      
+      // Intentar cargar comentarios si tenemos el ID del post
+      if (post.id) {
+        try {
+          const commentsResponse = await fetch(`${import.meta.env.PUBLIC_API_URL || 'https://taita-api.onrender.com/api'}/comments?postId=${post.id}&status=APPROVED`, {
+            headers: {
+              'Accept': 'application/json',
+              'Host': tenantInfo.host,
+              'X-Taita-Subdomain': tenantInfo.subdomain
+            }
+          });
+          
+          if (commentsResponse.ok) {
+            comments = await commentsResponse.json();
+            console.log(`slug.astro - Obtenidos ${comments.length} comentarios`);
+          }
+        } catch (commentsError) {
+          console.error('slug.astro - Error al obtener comentarios:', commentsError);
+        }
+      }
     } else if (typeof postData === 'object') {
       post = postData;
       console.log('slug.astro - Post encontrado como objeto:', post.id, post.title);
@@ -75,20 +105,20 @@ try {
 
 // Handle 404 - post not found
 if (!post) {
-  // Try alternate endpoint format before giving up
+  // Try with legacy method before giving up
   try {
-    console.log('slug.astro - Intentando buscar post con endpoint alternativo');
-    const alternatePostData = await fetchTenantData(`/posts/public?slug=${slug}`, tenantInfo);
+    console.log('slug.astro - Intentando buscar post con método legacy');
+    const legacyPostData = await fetchTenantData(`/posts/public/slug/${slug}`, tenantInfo);
     
-    if (alternatePostData && Array.isArray(alternatePostData) && alternatePostData.length > 0) {
-      post = alternatePostData[0];
-      console.log('slug.astro - Post encontrado con endpoint alternativo:', post.id, post.title);
+    if (legacyPostData && Array.isArray(legacyPostData) && legacyPostData.length > 0) {
+      post = legacyPostData[0];
+      console.log('slug.astro - Post encontrado con método legacy:', post.id, post.title);
     } else {
-      console.log('slug.astro - No se encontró post con endpoint alternativo');
+      console.log('slug.astro - No se encontró post con método legacy');
     }
   } catch (error) {
-    console.error('slug.astro - Error con endpoint alternativo:', error);
-    errorMessages.push(`Error con endpoint alternativo: ${error.message}`);
+    console.error('slug.astro - Error con método legacy:', error);
+    errorMessages.push(`Error con método legacy: ${error.message}`);
   }
 }
 
@@ -109,7 +139,7 @@ function formatDate(dateString) {
   });
 }
 
-const formattedDate = formatDate(post.publishedAt);
+const formattedDate = formatDate(post.publishedAt || post.createdAt);
 console.log('slug.astro - Post procesado correctamente. Renderizando.');
 ---
 
@@ -136,7 +166,7 @@ console.log('slug.astro - Post procesado correctamente. Renderizando.');
     <header class="post-header">
       <h1>{post.title}</h1>
       <div class="post-meta">
-        <time datetime={post.publishedAt}>{formattedDate}</time>
+        <time datetime={post.publishedAt || post.createdAt}>{formattedDate}</time>
         {post.category && (
           <span class="category">
             <a href={`/category/${post.category.slug}`}>{post.category.name}</a>
@@ -147,7 +177,10 @@ console.log('slug.astro - Post procesado correctamente. Renderizando.');
     
     {post.image && (
       <div class="featured-image">
-        <img src={`${import.meta.env.PUBLIC_IMAGE_BASE_URL}/${post.image}`} alt={post.title} />
+        <img 
+          src={post.image.startsWith('http') ? post.image : `${import.meta.env.PUBLIC_IMAGE_BASE_URL || ''}/${post.image}`} 
+          alt={post.title} 
+        />
       </div>
     )}
     
@@ -158,7 +191,11 @@ console.log('slug.astro - Post procesado correctamente. Renderizando.');
         <h3>Sobre el autor</h3>
         <div class="author-info">
           {post.author.picture && (
-            <img src={`${import.meta.env.PUBLIC_IMAGE_BASE_URL}/${post.author.picture}`} alt={post.author.name} class="author-avatar" />
+            <img 
+              src={post.author.picture.startsWith('http') ? post.author.picture : `${import.meta.env.PUBLIC_IMAGE_BASE_URL || ''}/${post.author.picture}`} 
+              alt={post.author.name} 
+              class="author-avatar" 
+            />
           )}
           <div>
             <h4>{post.author.name}</h4>
@@ -167,8 +204,37 @@ console.log('slug.astro - Post procesado correctamente. Renderizando.');
         </div>
       </div>
     )}
+    
+    <!-- Sección de comentarios -->
+    {comments.length > 0 && (
+      <section class="comments-section">
+        <h2>Comentarios</h2>
+        <ul class="comments-list">
+          {comments.map(comment => (
+            <li class="comment-item">
+              <div class="comment-author">{comment.authorName}</div>
+              <div class="comment-content">{comment.content}</div>
+              <time class="comment-date" datetime={comment.createdAt}>
+                {formatDate(comment.createdAt)}
+              </time>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
+    
+    <!-- Formulario de comentarios -->
+    <section class="comment-form-section">
+      <h2>Deja un comentario</h2>
+      <comment-form 
+        api-base={import.meta.env.PUBLIC_API_URL || 'https://taita-api.onrender.com/api'} 
+        post-id={post.id.toString()}
+      ></comment-form>
+    </section>
   </article>
 </BlogLayout>
+
+<script type="module" src="/src/components/CommentForm.js"></script>
 
 <style>
   .debug-panel {
@@ -283,6 +349,45 @@ console.log('slug.astro - Post procesado correctamente. Renderizando.');
     height: 80px;
     border-radius: 50%;
     object-fit: cover;
+  }
+  
+  /* Estilos para comentarios */
+  .comments-section {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid #eee;
+  }
+  
+  .comments-list {
+    list-style: none;
+    padding: 0;
+  }
+  
+  .comment-item {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid #eee;
+  }
+  
+  .comment-author {
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+  }
+  
+  .comment-content {
+    line-height: 1.6;
+    margin-bottom: 0.5rem;
+  }
+  
+  .comment-date {
+    color: #666;
+    font-size: 0.9rem;
+  }
+  
+  .comment-form-section {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid #eee;
   }
   
   @media (max-width: 768px) {

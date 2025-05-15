@@ -1,62 +1,123 @@
-export const prerender = false;
+// Este archivo implementa un endpoint de proxy para evitar problemas de CORS
+// Actúa como intermediario entre el frontend y la API
 
-export async function GET({ request }) {
+export async function post({ request }) {
   try {
-    // Extraer el path desde la consulta
-    const url = new URL(request.url);
-    const endpoint = url.searchParams.get('endpoint') || '/posts/public';
-    const subdomain = url.searchParams.get('subdomain') || 'demo';
+    // Extraer datos de la petición
+    const data = await request.json();
+    const { endpoint, method = 'GET', body, queryParams } = data;
     
-    // Construir la URL de la API
-    const apiUrl = `${import.meta.env.PUBLIC_API_URL}${endpoint}?subdomain=${subdomain}`;
-    
-    console.log(`🔄 Proxy - Redirigiendo solicitud a: ${apiUrl}`);
-    
-    // Reenviar la solicitud a la API
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'X-Taita-Subdomain': subdomain,
-        'Origin': 'https://taita-api.onrender.com'
-      }
-    });
-    
-    // Si la respuesta no es OK, lanzar un error
-    if (!response.ok) {
-      const errorText = await response.text();
-      return new Response(JSON.stringify({
-        error: `Error en la API: ${response.status}`,
-        details: errorText
-      }), {
-        status: response.status,
-        headers: {
-          'Content-Type': 'application/json'
+    // Validar el endpoint
+    if (!endpoint) {
+      return new Response(
+        JSON.stringify({ error: 'Se requiere un endpoint' }),
+        { 
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
-      });
+      );
     }
     
-    // Obtener los datos de la respuesta
-    const data = await response.json();
+    // Construir URL de la API
+    const apiUrl = import.meta.env.PUBLIC_API_URL || 'https://taita-api.onrender.com/api';
+    let url = `${apiUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
     
-    // Devolver la respuesta con los datos
-    return new Response(JSON.stringify(data), {
-      status: 200,
+    // Añadir parámetros de consulta si existen
+    if (queryParams && Object.keys(queryParams).length > 0) {
+      const searchParams = new URLSearchParams();
+      Object.entries(queryParams).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          searchParams.append(key, value);
+        }
+      });
+      url = `${url}?${searchParams.toString()}`;
+    }
+    
+    // Extraer información del host y subdominio
+    const host = request.headers.get('host') || '';
+    let subdomain = data.subdomain || '';
+    
+    if (!subdomain) {
+      if (host.includes('.') && !host.startsWith('www.')) {
+        subdomain = host.split('.')[0];
+      } else if (host.includes('localhost')) {
+        subdomain = 'demo'; // Valor por defecto para desarrollo local
+      }
+    }
+    
+    console.log(`[Proxy] Petición a ${url}`);
+    console.log(`[Proxy] Host: ${host}, Subdominio: ${subdomain}`);
+    
+    // Construir opciones de fetch
+    const options = {
+      method,
       headers: {
         'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache, no-store, must-revalidate'
+        'Accept': 'application/json',
+        'Host': host,
+        'X-Taita-Subdomain': subdomain || 'demo',
+        'Origin': 'https://taita.blog',
+        'Referer': 'https://taita.blog/'
       }
-    });
+    };
+    
+    // Añadir cuerpo si es necesario
+    if (body && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+      options.body = JSON.stringify(body);
+    }
+    
+    // Realizar petición a la API
+    const response = await fetch(url, options);
+    const contentType = response.headers.get('content-type');
+    
+    // Determinar el tipo de contenido de la respuesta
+    let responseData;
+    let responseContentType;
+    
+    if (contentType && contentType.includes('application/json')) {
+      try {
+        responseData = await response.json();
+        responseContentType = 'application/json';
+      } catch (error) {
+        // Si falla al parsear JSON, obtener como texto
+        console.error(`[Proxy] Error al parsear JSON:`, error);
+        responseData = await response.text();
+        responseContentType = 'text/plain';
+      }
+    } else {
+      // Si no es JSON, obtener como texto
+      responseData = await response.text();
+      responseContentType = contentType || 'text/plain';
+    }
+    
+    // Devolver respuesta al cliente
+    if (responseContentType === 'application/json') {
+      return new Response(
+        JSON.stringify(responseData),
+        {
+          status: response.status,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    } else {
+      return new Response(
+        responseData,
+        {
+          status: response.status,
+          headers: { 'Content-Type': responseContentType }
+        }
+      );
+    }
   } catch (error) {
-    console.error('Error en proxy:', error);
-    return new Response(JSON.stringify({
-      error: error.message,
-      stack: error.stack
-    }), {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json'
+    console.error(`[Proxy] Error:`, error);
+    
+    // Devolver error al cliente
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
       }
-    });
+    );
   }
 }

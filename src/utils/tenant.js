@@ -1,3 +1,5 @@
+import { api } from './api.js';
+
 /**
  * Extrae información del tenant desde la petición
  * @param {Request} request - Objeto request de Astro
@@ -81,18 +83,41 @@ export function getTenantInfo(request) {
  * @returns {Promise<Object>} Respuesta de la API
  */
 export async function fetchTenantData(endpoint, tenantInfo, options = {}) {
+  // Configurar cliente API con la información del tenant
+  const apiClient = new api.constructor();
+  
+  // Sobreescribir el método getHostInfo para usar la información del tenant
+  apiClient.getHostInfo = () => ({
+    host: tenantInfo.host,
+    subdomain: tenantInfo.subdomain
+  });
+  
+  // Usar el cliente API para hacer la petición
+  try {
+    console.log(`[fetchTenantData] Solicitando ${endpoint} con tenant:`, tenantInfo.subdomain);
+    return await apiClient.fetch(endpoint, options);
+  } catch (error) {
+    console.error(`[fetchTenantData] Error al consultar ${endpoint}:`, error);
+    // Intentar una vez más con el método original como fallback
+    console.log('[fetchTenantData] Intentando nuevamente con método original');
+    return await _fetchTenantDataLegacy(endpoint, tenantInfo, options);
+  }
+}
+
+/**
+ * Versión legacy de fetchTenantData como fallback
+ * @private
+ */
+async function _fetchTenantDataLegacy(endpoint, tenantInfo, options = {}) {
   const apiBase = import.meta.env.PUBLIC_API_URL || 'https://taita-api.onrender.com/api';
-  console.log('[fetchTenantData] API Base:', apiBase);
-  console.log('[fetchTenantData] Endpoint:', endpoint);
-  console.log('[fetchTenantData] Tenant Info:', tenantInfo);
+  console.log('[fetchTenantData:Legacy] API Base:', apiBase);
+  console.log('[fetchTenantData:Legacy] Endpoint:', endpoint);
   
   // Añadir parámetros de consulta para identificación del tenant
   const url = new URL(`${apiBase}${endpoint}`);
   if (tenantInfo.subdomain) {
     url.searchParams.set('subdomain', tenantInfo.subdomain);
   }
-  
-  console.log('[fetchTenantData] URL completa:', url.toString());
   
   // Añadir header de host para identificación del tenant en el servidor
   const headers = {
@@ -102,29 +127,44 @@ export async function fetchTenantData(endpoint, tenantInfo, options = {}) {
     ...(options.headers || {})
   };
   
-  console.log('[fetchTenantData] Headers:', headers);
-  
   try {
-    console.log('[fetchTenantData] Iniciando fetch a:', url.toString());
+    console.log('[fetchTenantData:Legacy] Iniciando fetch a:', url.toString());
     const response = await fetch(url.toString(), {
       ...options,
       headers
     });
     
-    console.log('[fetchTenantData] Estado de respuesta:', response.status);
-    
     if (!response.ok) {
       const text = await response.text();
-      console.error(`[fetchTenantData] Error en la respuesta de la API (${response.status}):`, text);
+      console.error(`[fetchTenantData:Legacy] Error en la respuesta (${response.status}):`, text);
       throw new Error(`Error en la API: ${response.status}`);
     }
     
     const data = await response.json();
-    console.log('[fetchTenantData] Respuesta exitosa, primeros elementos:', 
-      Array.isArray(data) ? data.slice(0, 2) : (typeof data === 'object' ? Object.keys(data) : data));
     return data;
   } catch (error) {
-    console.error(`[fetchTenantData] Error al consultar ${endpoint}:`, error);
+    console.error(`[fetchTenantData:Legacy] Error final:`, error);
     return null;
   }
+}
+
+// Métodos adicionales para interactuar con el API a través de nuestro nuevo cliente
+export function getPostsForTenant(tenantInfo) {
+  return fetchTenantData('/posts/public', tenantInfo);
+}
+
+export function getPostBySlugForTenant(slug, tenantInfo) {
+  return fetchTenantData(`/posts/public/slug/${slug}`, tenantInfo);
+}
+
+export function getCategoriesForTenant(tenantInfo) {
+  return fetchTenantData('/categories/public', tenantInfo);
+}
+
+export function getMenuForTenant(tenantInfo) {
+  return fetchTenantData('/menu/public', tenantInfo);
+}
+
+export function getSettingsForTenant(tenantInfo) {
+  return fetchTenantData('/settings/public', tenantInfo);
 }
