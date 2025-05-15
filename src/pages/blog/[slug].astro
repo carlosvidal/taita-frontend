@@ -103,25 +103,38 @@ let post;
 try {
   // Obtener el host para determinar el blog
   const host = Astro.request.headers.get('host') || '';
+  console.log('Host en [slug].astro:', host);
   
   // Obtener el post desde la API
   const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000';
+  console.log('Obteniendo post con slug:', slug);
+  console.log('URL completa:', `${apiUrl}/api/posts/public/slug/${slug}`);
+  
   const response = await fetch(`${apiUrl}/api/posts/public/slug/${slug}`, {
     headers: {
+      'Accept': 'application/json',
       'Host': host
     }
   });
+  
+  // Debug la respuesta
+  const responseText = await response.text();
+  console.log('Respuesta cruda:', responseText);
   
   if (!response.ok) {
     throw new Error(`Error al obtener el post: ${response.status}`);
   }
   
-  const posts = await response.json();
+  // Convertir el texto de respuesta a JSON
+  const posts = JSON.parse(responseText);
+  console.log('Posts obtenidos:', posts);
   
   // Verificar si se encontró un post
   if (posts && posts.length > 0) {
     post = posts[0];
+    console.log('Post encontrado:', post);
   } else {
+    console.log('No se encontró ningún post, usando fallback');
     // Si no se encuentra el post, usar los datos de fallback
     post = Astro.props.post;
   }

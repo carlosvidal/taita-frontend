@@ -5,8 +5,8 @@ import BlogLayout from '../layouts/BlogLayout.astro';
 export const prerender = false;
 
 // API endpoint definitions
-// Usar la URL de la API desplegada en Render
-const API_BASE = import.meta.env.API_URL || 'https://taita-api.onrender.com/api';
+// Usar la URL de la API local o la configurada en las variables de entorno
+const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
 const POSTS_API = `${API_BASE}/posts/public`; // Endpoint público sin autenticación
 const MENU_API = `${API_BASE}/menu/public`;
 const CATEGORIES_API = `${API_BASE}/categories/public`;
@@ -15,15 +15,19 @@ const SETTINGS_API = `${API_BASE}/settings/public`;
 // Helper function to handle API responses
 async function fetchAPI(url: string) {
   try {
+    // Obtener el host actual para enviarlo en la solicitud
+    const host = Astro.request.headers.get('host') || 'localhost:3000';
+    
     const res = await fetch(url, {
       headers: {
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'Host': host
       }
     });
     
     // Debug the response
     const text = await res.text();
-    console.log(`Response from ${url}:`, text);
+    console.log(`Response from ${url} with host ${host}:`, text);
     
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
     if (text.startsWith('<!DOCTYPE')) throw new Error('Received HTML instead of JSON');
