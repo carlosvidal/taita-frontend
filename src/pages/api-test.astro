@@ -14,19 +14,34 @@ let subdomain = '';
 host = Astro.request.headers.get('host') || '';
 subdomain = host.includes('.') ? host.split('.')[0] : (host.includes(':') ? 'demo' : host);
 
-// Realizar consulta de prueba
+// Variables para almacenar la respuesta del proxy
+let proxyResponse = null;
+let proxyError = null;
+
+// Realizar consulta de prueba directa
 try {
   const apiUrl = import.meta.env.PUBLIC_API_URL || 'https://taita-api.onrender.com/api';
-  console.log('Probando API:', apiUrl);
+  console.log('Probando API directamente:', apiUrl);
   
   // Intentar obtener posts
   const response = await fetch(`${apiUrl}/posts/public`, {
     headers: {
       'Accept': 'application/json',
       'Host': host,
-      'X-Taita-Subdomain': subdomain
+      'X-Taita-Subdomain': subdomain,
+      'Origin': 'https://taita.blog',
+      'Referer': 'https://taita.blog/',
+      'User-Agent': 'Mozilla/5.0 (Test Diagnostic)'
     }
   });
+  
+  console.log('Respuesta de API directa - Status:', response.status, response.statusText);
+  // Mostrar todos los headers
+  const headers = {};
+  response.headers.forEach((value, key) => {
+    headers[key] = value;
+  });
+  console.log('Headers de respuesta directa:', headers);
   
   if (!response.ok) {
     const errorText = await response.text();
@@ -34,9 +49,47 @@ try {
   }
   
   apiResponse = await response.json();
+  console.log('Respuesta directa exitosa:', apiResponse);
 } catch (error) {
-  console.error('Error en la prueba API:', error);
+  console.error('Error en la prueba API directa:', error);
   apiError = error.message;
+}
+
+// Realizar consulta de prueba a través del proxy
+try {
+  console.log('Probando API a través del proxy');
+  
+  // Intentar obtener posts
+  const proxyReq = await fetch('/api/proxy', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      endpoint: '/posts/public',
+      method: 'GET',
+      subdomain: subdomain
+    })
+  });
+  
+  console.log('Respuesta del proxy - Status:', proxyReq.status, proxyReq.statusText);
+  
+  if (!proxyReq.ok) {
+    const errorText = await proxyReq.text();
+    throw new Error(`Error del proxy ${proxyReq.status}: ${errorText}`);
+  }
+  
+  proxyResponse = await proxyReq.json();
+  console.log('Respuesta del proxy exitosa:', proxyResponse);
+  
+  // Si la conexión directa falló pero el proxy funcionó, usar esa respuesta
+  if (apiError && !proxyError) {
+    apiResponse = proxyResponse;
+    apiError = null;
+  }
+} catch (e) {
+  console.error('Error en la prueba API a través del proxy:', e);
+  proxyError = e.message;
 }
 ---
 
@@ -61,32 +114,100 @@ try {
     <section class="response-section">
       <h2>Resultado de la prueba</h2>
       
-      {apiError ? (
-        <div class="error-box">
-          <h3>Error al conectar con la API</h3>
-          <p>{apiError}</p>
-          
-          <div class="troubleshooting">
-            <h4>Posibles soluciones:</h4>
-            <ol>
-              <li>Verifica que la API esté en funcionamiento</li>
-              <li>Comprueba la configuración de CORS en el servidor</li>
-              <li>Asegúrate de que Cloudflare no esté bloqueando las peticiones</li>
-              <li>Revisa los headers de la petición</li>
-            </ol>
+      <!-- Conexión Directa -->
+      <div class="test-panel">
+        <h3>Conexión Directa a la API</h3>
+        
+        {apiError ? (
+          <div class="error-box">
+            <h4>Error al conectar directamente con la API</h4>
+            <p>{apiError}</p>
           </div>
-        </div>
-      ) : (
-        <div class="success-box">
-          <h3>Conexión exitosa</h3>
-          <p>Se han recibido {Array.isArray(apiResponse) ? apiResponse.length : 'datos'} desde la API.</p>
-          
-          <details>
-            <summary>Ver respuesta completa</summary>
-            <pre>{JSON.stringify(apiResponse, null, 2)}</pre>
-          </details>
-        </div>
-      )}
+        ) : (
+          <div class="success-box">
+            <h4>Conexión directa exitosa</h4>
+            <p>Se han recibido {Array.isArray(apiResponse) ? apiResponse.length : 'datos'} desde la API.</p>
+            
+            <details>
+              <summary>Ver respuesta completa</summary>
+              <pre>{JSON.stringify(apiResponse, null, 2)}</pre>
+            </details>
+          </div>
+        )}
+      </div>
+      
+      <!-- Conexión a través del Proxy -->
+      <div class="test-panel">
+        <h3>Conexión a través del Proxy</h3>
+        
+        {proxyError ? (
+          <div class="error-box">
+            <h4>Error al conectar a través del proxy</h4>
+            <p>{proxyError}</p>
+          </div>
+        ) : (
+          <div class="success-box">
+            <h4>Conexión a través del proxy exitosa</h4>
+            <p>Se han recibido {Array.isArray(proxyResponse) ? proxyResponse.length : 'datos'} desde el proxy.</p>
+            
+            <details>
+              <summary>Ver respuesta completa</summary>
+              <pre>{JSON.stringify(proxyResponse, null, 2)}</pre>
+            </details>
+          </div>
+        )}
+      </div>
+      
+      <!-- Resumen y Diagnóstico -->
+      <div class="diagnosis-panel">
+        <h3>Diagnóstico</h3>
+        
+        {(apiError && proxyError) ? (
+          <div class="error-box">
+            <h4>Problema de conexión detectado</h4>
+            <p>No se pudo conectar con la API ni directamente ni a través del proxy.</p>
+            
+            <div class="troubleshooting">
+              <h4>Posibles soluciones:</h4>
+              <ol>
+                <li>Verifica que la API esté en funcionamiento: <code>curl https://taita-api.onrender.com/api/posts/public</code></li>
+                <li>Comprueba que el subdominio "demo" existe en la base de datos</li>
+                <li>Revisa los logs del servidor</li>
+                <li>Verifica la configuración de CORS en el servidor</li>
+                <li>Asegúrate de que Cloudflare no esté bloqueando las peticiones</li>
+              </ol>
+            </div>
+          </div>
+        ) : apiError ? (
+          <div class="warning-box">
+            <h4>Conexión directa fallida, pero proxy funcionando</h4>
+            <p>La conexión directa a la API falló, pero el proxy está funcionando correctamente. Esto sugiere un problema de CORS o restricciones de Cloudflare.</p>
+          </div>
+        ) : proxyError ? (
+          <div class="warning-box">
+            <h4>Conexión directa funcionando, pero proxy fallando</h4>
+            <p>La conexión directa a la API funciona, pero el proxy está fallando. Esto sugiere un problema con la configuración interna de la aplicación.</p>
+          </div>
+        ) : (
+          <div class="success-box">
+            <h4>Todo funciona correctamente</h4>
+            <p>Tanto la conexión directa como el proxy están funcionando correctamente.</p>
+            
+            {Array.isArray(apiResponse) && apiResponse.length === 0 && (
+              <div class="warning-box" style="margin-top: 1rem;">
+                <h5>No hay datos para mostrar</h5>
+                <p>La API devolvió un array vacío. Esto podría indicar que:</p>
+                <ul>
+                  <li>No hay posts publicados para el subdominio "{subdomain}"</li>
+                  <li>El subdominio "{subdomain}" no existe en la base de datos</li>
+                  <li>Hay un problema con la consulta a la base de datos</li>
+                </ul>
+                <p>Verifica en la base de datos que existe un blog con el subdominio "{subdomain}" y que tiene posts publicados.</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </section>
     
     <section class="test-section">
@@ -100,6 +221,20 @@ try {
       
       <div id="test-result" class="test-result">
         <p>Haz clic en un botón para probar la ruta</p>
+      </div>
+    </section>
+    
+    <section class="action-section">
+      <h2>Acciones de diagnóstico avanzado</h2>
+      
+      <div class="action-buttons">
+        <button id="btn-debug-posts" class="debug-button">Prueba forzando subdominio "demo"</button>
+        <button id="btn-proxy-debug" class="debug-button">Usar proxy con forzado de subdominio</button>
+        <button id="btn-curl" class="debug-button">Generar comando curl para pruebas</button>
+      </div>
+      
+      <div id="debug-result" class="debug-result">
+        <p>Haz clic para ejecutar una acción de diagnóstico</p>
       </div>
     </section>
   </main>
@@ -146,11 +281,120 @@ try {
     }
   };
   
+  // Función para forzar subdomain "demo"
+  const testDebugPosts = async () => {
+    const result = document.getElementById('debug-result');
+    result.innerHTML = '<p>Cargando con subdominio forzado a "demo"...</p>';
+    
+    try {
+      const apiUrl = import.meta.env.PUBLIC_API_URL || 'https://taita-api.onrender.com/api';
+      
+      const response = await fetch(`${apiUrl}/posts/public`, {
+        headers: {
+          'Accept': 'application/json',
+          'Host': 'demo.taita.blog',
+          'X-Taita-Subdomain': 'demo',
+          'Origin': 'https://taita.blog',
+          'Referer': 'https://taita.blog/',
+          'User-Agent': 'TaitaDebugger/1.0'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Error ${response.status}: ${errorText}`);
+      }
+      
+      const data = await response.json();
+      result.innerHTML = `
+        <div class="success-test">
+          <h3>Éxito con subdominio forzado "demo"</h3>
+          <p>Se encontraron ${Array.isArray(data) ? data.length : 0} posts</p>
+          <pre>${JSON.stringify(data, null, 2)}</pre>
+        </div>
+      `;
+    } catch (error) {
+      result.innerHTML = `
+        <div class="error-test">
+          <h3>Error al consultar con subdominio forzado</h3>
+          <p>${error.message}</p>
+        </div>
+      `;
+    }
+  };
+  
+  // Función para usar el proxy con subdominio forzado
+  const testProxyDebug = async () => {
+    const result = document.getElementById('debug-result');
+    result.innerHTML = '<p>Probando proxy con subdominio forzado...</p>';
+    
+    try {
+      const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          endpoint: '/posts/public',
+          method: 'GET',
+          subdomain: 'demo' // Forzar subdomain a "demo"
+        })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Error del proxy ${response.status}: ${errorText}`);
+      }
+      
+      const data = await response.json();
+      result.innerHTML = `
+        <div class="success-test">
+          <h3>Éxito con proxy y subdominio forzado</h3>
+          <p>Se encontraron ${Array.isArray(data) ? data.length : 0} posts</p>
+          <pre>${JSON.stringify(data, null, 2)}</pre>
+        </div>
+      `;
+    } catch (error) {
+      result.innerHTML = `
+        <div class="error-test">
+          <h3>Error con proxy y subdominio forzado</h3>
+          <p>${error.message}</p>
+        </div>
+      `;
+    }
+  };
+  
+  // Generar comando curl
+  const showCurlCommand = () => {
+    const result = document.getElementById('debug-result');
+    const apiUrl = import.meta.env.PUBLIC_API_URL || 'https://taita-api.onrender.com/api';
+    
+    const curlCommand = `curl -v "${apiUrl}/posts/public" \\
+  -H "Host: demo.taita.blog" \\
+  -H "X-Taita-Subdomain: demo" \\
+  -H "Accept: application/json" \\
+  -H "Origin: https://taita.blog" \\
+  -H "Referer: https://taita.blog/"`;
+    
+    result.innerHTML = `
+      <div class="info-box">
+        <h3>Comando curl para pruebas</h3>
+        <p>Copia y pega este comando en tu terminal para probar directamente la API:</p>
+        <pre>${curlCommand}</pre>
+      </div>
+    `;
+  };
+  
   // Agregar listeners a los botones
   document.getElementById('btn-posts').addEventListener('click', () => testEndpoint('/posts/public'));
   document.getElementById('btn-categories').addEventListener('click', () => testEndpoint('/categories/public'));
   document.getElementById('btn-menu').addEventListener('click', () => testEndpoint('/menu/public'));
   document.getElementById('btn-settings').addEventListener('click', () => testEndpoint('/settings/public'));
+  
+  // Listeners para los botones de diagnóstico avanzado
+  document.getElementById('btn-debug-posts').addEventListener('click', testDebugPosts);
+  document.getElementById('btn-proxy-debug').addEventListener('click', testProxyDebug);
+  document.getElementById('btn-curl').addEventListener('click', showCurlCommand);
 </script>
 
 <style>
@@ -178,24 +422,58 @@ try {
     gap: 0.5rem;
   }
   
+  .test-panel {
+    margin-bottom: 1.5rem;
+    padding: 1.5rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+  }
+  
+  .diagnosis-panel {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    background-color: #f0f4f8;
+    border-radius: 8px;
+    border: 1px solid #d0e3f7;
+  }
+  
   .error-box {
     padding: 1rem;
+    margin: 1rem 0;
     background-color: #fee;
     border-left: 4px solid #d00;
     border-radius: 4px;
   }
   
+  .warning-box {
+    padding: 1rem;
+    margin: 1rem 0;
+    background-color: #fff9e6;
+    border-left: 4px solid #f0ad4e;
+    border-radius: 4px;
+  }
+  
   .success-box {
     padding: 1rem;
+    margin: 1rem 0;
     background-color: #efe;
     border-left: 4px solid #090;
     border-radius: 4px;
   }
   
-  .test-buttons {
+  .info-box {
+    padding: 1rem;
+    margin: 1rem 0;
+    background-color: #e6f7ff;
+    border-left: 4px solid #1890ff;
+    border-radius: 4px;
+  }
+  
+  .test-buttons, .action-buttons {
     display: flex;
     gap: 1rem;
     margin-bottom: 1rem;
+    flex-wrap: wrap;
   }
   
   button {
@@ -211,6 +489,14 @@ try {
     background-color: #0055aa;
   }
   
+  .debug-button {
+    background-color: #5a1e82;
+  }
+  
+  .debug-button:hover {
+    background-color: #481768;
+  }
+  
   pre {
     background-color: #f0f0f0;
     padding: 1rem;
@@ -219,9 +505,12 @@ try {
     font-size: 0.9rem;
   }
   
-  .test-result {
+  .test-result, .debug-result {
     margin-top: 1rem;
     min-height: 100px;
+    padding: 1rem;
+    background-color: #f5f5f5;
+    border-radius: 4px;
   }
   
   .error-test {
@@ -252,7 +541,13 @@ try {
     border-radius: 4px;
   }
   
-  ol {
+  ol, ul {
     margin-left: 1.5rem;
+  }
+  
+  .action-section {
+    margin-top: 3rem;
+    border-top: 1px solid #ddd;
+    padding-top: 2rem;
   }
 </style>

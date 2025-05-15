@@ -123,8 +123,43 @@ export async function POST({ request }) {
       }
     }
     
-    console.log(`[Proxy] Petición a ${url}`);
-    console.log(`[Proxy] Host: ${host}, Subdominio: ${subdomain}`);
+// Debugging específico para posts/public
+    if (endpoint === '/posts/public' || endpoint.includes('/posts/public')) {
+      console.log(`[Proxy DEBUG] Petición especial a /posts/public`);
+      
+      // Forzar subdomain a "demo" para pruebas
+      const debugOptions = {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Host': 'demo.taita.blog',
+          'X-Taita-Subdomain': 'demo',
+          'Origin': 'https://taita.blog',
+          'Referer': 'https://taita.blog/',
+          'User-Agent': 'TaitaDebugger/1.0'
+        }
+      };
+      
+      console.log(`[Proxy DEBUG] Usando headers especiales para debug:`, JSON.stringify(debugOptions.headers, null, 2));
+      
+      // Hacer la petición con los headers específicos
+      try {
+        const debugResponse = await fetch(url, debugOptions);
+        console.log(`[Proxy DEBUG] Respuesta especial: Status ${debugResponse.status}`);
+        
+        const debugData = await debugResponse.clone().text();
+        console.log(`[Proxy DEBUG] Respuesta cruda: ${debugData.substring(0, 200)}...`);
+        
+        return processApiResponse(debugResponse);
+      } catch (debugError) {
+        console.error(`[Proxy DEBUG] Error con petición especial:`, debugError);
+      }
+    }
+    
+    // Continuar con la petición normal si la de debug falló o no aplica
+    console.log(`[Proxy] Petición regular a ${url}`);
+    console.log(`[Proxy] Opciones regulares:`, JSON.stringify(options, null, 2));
     
     // Construir opciones de fetch
     const options = {
