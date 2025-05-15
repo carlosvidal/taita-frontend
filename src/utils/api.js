@@ -23,13 +23,17 @@ export class ApiClient {
         subdomain = host.split('.')[0];
       } else if (host.includes('localhost')) {
         subdomain = 'demo'; // Usar demo como subdominio por defecto en desarrollo
+      } else if (host.includes('taita-frontend') || host.includes('render.com')) {
+        // Para sitios desplegados en Render
+        subdomain = 'demo';
       }
       
+      console.log(`[ApiClient] Host detectado: ${host}, Subdominio: ${subdomain}`);
       return { host, subdomain };
     }
     
     // Si estamos en el servidor, valor por defecto
-    return { host: 'localhost', subdomain: 'demo' };
+    return { host: 'taita.blog', subdomain: 'demo'};
   }
   
   /**
@@ -54,9 +58,14 @@ export class ApiClient {
         'Accept': 'application/json',
         'Host': host,
         'X-Taita-Subdomain': subdomain,
+        'Origin': 'https://taita.blog',
+        'Referer': 'https://taita.blog/',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36',
         ...options.headers
       }
     };
+    
+    console.log(`[ApiClient] Opciones de fetch:`, JSON.stringify(fetchOptions, null, 2));
     
     // Añadir cuerpo si es necesario
     if (options.body && (fetchOptions.method === 'POST' || fetchOptions.method === 'PUT' || fetchOptions.method === 'PATCH')) {

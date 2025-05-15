@@ -28,6 +28,12 @@ export function getTenantInfo(request) {
       console.log('[getTenantInfo] Error al extraer query params, usando subdomain por defecto:', subdomain);
     }
   } 
+  // Manejar despliegues en Render
+  else if (host.includes('render.com') || host.includes('taita-frontend')) {
+    subdomain = 'demo'; // Usar demo como subdominio por defecto en Render
+    domain = 'taita.blog';
+    console.log('[getTenantInfo] Despliegue en Render detectado, usando subdomain por defecto:', subdomain);
+  }
   // Manejar dominios personalizados completos (sin subdominio)
   else if (host === 'taita.blog' || host === 'www.taita.blog') {
     subdomain = 'demo'; // Subdomain por defecto para el dominio principal
@@ -83,19 +89,37 @@ export function getTenantInfo(request) {
  * @returns {Promise<Object>} Respuesta de la API
  */
 export async function fetchTenantData(endpoint, tenantInfo, options = {}) {
+  // Asegurarse de que tenantInfo tenga un subdominio válido
+  if (!tenantInfo.subdomain || tenantInfo.subdomain === '') {
+    console.log('[fetchTenantData] No se detectó subdominio, usando "demo" por defecto');
+    tenantInfo.subdomain = 'demo';
+  }
+  
   // Configurar cliente API con la información del tenant
   const apiClient = new api.constructor();
   
   // Sobreescribir el método getHostInfo para usar la información del tenant
   apiClient.getHostInfo = () => ({
-    host: tenantInfo.host,
+    host: tenantInfo.host || 'taita.blog',
     subdomain: tenantInfo.subdomain
   });
   
   // Usar el cliente API para hacer la petición
   try {
     console.log(`[fetchTenantData] Solicitando ${endpoint} con tenant:`, tenantInfo.subdomain);
-    return await apiClient.fetch(endpoint, options);
+    
+    // Añadir encabezados adicionales que pueden ayudar con Cloudflare
+    const enhancedOptions = {
+      ...options,
+      headers: {
+        ...options.headers,
+        'Origin': 'https://taita.blog',
+        'Referer': 'https://taita.blog/',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'
+      }
+    };
+    
+    return await apiClient.fetch(endpoint, enhancedOptions);
   } catch (error) {
     console.error(`[fetchTenantData] Error al consultar ${endpoint}:`, error);
     // Intentar una vez más con el método original como fallback
