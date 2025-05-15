@@ -1,0 +1,133 @@
+---
+// src/pages/404.astro
+import BlogLayout from '../layouts/BlogLayout.astro';
+import { getTenantInfo, fetchTenantData } from '../utils/tenant.js';
+
+export const prerender = false;
+
+// Get tenant information from request
+const tenantInfo = getTenantInfo(Astro.request);
+
+// Fetch menu and settings
+let menuItems = [];
+let settings = {};
+
+try {
+  const [menuData, settingsData] = await Promise.all([
+    fetchTenantData('/menu/public', tenantInfo),
+    fetchTenantData('/settings/public', tenantInfo)
+  ]);
+  
+  // Process menu data
+  if (menuData && Array.isArray(menuData)) {
+    menuItems = menuData.map(item => ({
+      label: item.label,
+      url: item.url,
+      active: false
+    }));
+  }
+  
+  // Process settings
+  if (settingsData) {
+    settings = settingsData;
+  }
+} catch (error) {
+  console.error('Error al obtener datos:', error);
+}
+
+// Fallback menu if API fails
+if (menuItems.length === 0) {
+  menuItems = [
+    { label: 'Inicio', url: '/', active: false },
+    { label: 'Blog', url: '/blog', active: false }
+  ];
+}
+
+// Set status code
+Astro.response.status = 404;
+---
+
+<BlogLayout 
+  title="Página no encontrada" 
+  description="La página que buscas no existe o ha sido movida."
+  menuItems={menuItems}
+  settings={settings}
+>
+  <div class="not-found">
+    <h1>404</h1>
+    <h2>Página no encontrada</h2>
+    <p>La página que buscas no existe o ha sido movida.</p>
+    <div class="actions">
+      <a href="/" class="home-button">Ir al inicio</a>
+      <button onclick="window.history.back()" class="back-button">Volver atrás</button>
+    </div>
+  </div>
+</BlogLayout>
+
+<style>
+  .not-found {
+    text-align: center;
+    padding: 4rem 1rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  
+  h1 {
+    font-size: 8rem;
+    margin: 0;
+    line-height: 1;
+    color: #0066cc;
+  }
+  
+  h2 {
+    font-size: 2rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  p {
+    font-size: 1.2rem;
+    color: #666;
+    margin-bottom: 2rem;
+  }
+  
+  .actions {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+  }
+  
+  .home-button, .back-button {
+    display: inline-block;
+    padding: 0.8rem 1.5rem;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.2s;
+  }
+  
+  .home-button {
+    background-color: #0066cc;
+    color: white;
+    border: none;
+  }
+  
+  .back-button {
+    background-color: #f5f5f5;
+    color: #333;
+    border: 1px solid #ddd;
+  }
+  
+  .home-button:hover, .back-button:hover {
+    transform: translateY(-2px);
+  }
+  
+  .home-button:hover {
+    background-color: #0055b3;
+  }
+  
+  .back-button:hover {
+    background-color: #eaeaea;
+  }
+</style>

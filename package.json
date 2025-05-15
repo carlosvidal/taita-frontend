@@ -1,16 +1,19 @@
 {
   "name": "taita-frontend",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "scripts": {
     "dev": "astro dev",
+    "start": "node ./dist/server/entry.mjs",
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/netlify": "^6.3.2",
     "@astrojs/node": "^9.2.1",
     "astro": "^5.6.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

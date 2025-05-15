@@ -1,43 +1,12 @@
 ---
 import BlogLayout from '../layouts/BlogLayout.astro';
+import { getTenantInfo, fetchTenantData } from '../utils/tenant.js';
 
 // Configuración para renderizado en el servidor
 export const prerender = false;
 
-// API endpoint definitions
-// Usar la URL de la API local o la configurada en las variables de entorno
-const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000/api';
-const POSTS_API = `${API_BASE}/posts/public`; // Endpoint público sin autenticación
-const MENU_API = `${API_BASE}/menu/public`;
-const CATEGORIES_API = `${API_BASE}/categories/public`;
-const SETTINGS_API = `${API_BASE}/settings/public`;
-
-// Helper function to handle API responses
-async function fetchAPI(url: string) {
-  try {
-    // Obtener el host actual para enviarlo en la solicitud
-    const host = Astro.request.headers.get('host') || 'localhost:3000';
-    
-    const res = await fetch(url, {
-      headers: {
-        'Accept': 'application/json',
-        'Host': host
-      }
-    });
-    
-    // Debug the response
-    const text = await res.text();
-    console.log(`Response from ${url} with host ${host}:`, text);
-    
-    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-    if (text.startsWith('<!DOCTYPE')) throw new Error('Received HTML instead of JSON');
-    
-    return JSON.parse(text);
-  } catch (error) {
-    console.error(`Failed to fetch ${url}:`, error);
-    return null;
-  }
-}
+// Obtener información del tenant desde la petición
+const tenantInfo = getTenantInfo(Astro.request);
 
 // Definir tipos para mejorar el tipado
 interface Post {
@@ -48,6 +17,7 @@ interface Post {
   createdAt: string;
   updatedAt?: string;
   publishedAt?: string;
+  slug?: string;
   image?: string;
   category?: {
     id: number;
@@ -74,6 +44,7 @@ interface Category {
 interface Settings {
   title?: string;
   description?: string;
+  blogTitle?: string;
 }
 
 interface MenuItemForLayout {
@@ -82,93 +53,97 @@ interface MenuItemForLayout {
   active: boolean;
 }
 
+// Fetch data using tenant information
 let posts: Post[] = [];
 let menuItems: MenuItem[] = [];
 let categories: Category[] = [];
-let settingsData: Settings | null = null;
+let settingsData: Settings = {};
 let mappedMenuItems: MenuItemForLayout[] = [];
 
 try {
-  const [postsData, menuData, categoriesData, settingsResponse] = await Promise.all([
-    fetchAPI(POSTS_API),
-    fetchAPI(MENU_API),
-    fetchAPI(CATEGORIES_API),
-    fetchAPI(SETTINGS_API)
+  // Fetch posts, menu, settings, and categories in parallel
+  const [postsData, menuData, settingsResponse, categoriesData] = await Promise.all([
+    fetchTenantData('/posts/public', tenantInfo),
+    fetchTenantData('/menu/public', tenantInfo),
+    fetchTenantData('/settings/public', tenantInfo),
+    fetchTenantData('/categories/public', tenantInfo)
   ]);
   
   // Debug raw API responses
+  console.log('Tenant Info:', tenantInfo);
   console.log('Posts:', postsData);
   console.log('Menu:', menuData);
-  console.log('Categories:', categoriesData);
   console.log('Settings:', settingsResponse);
+  console.log('Categories:', categoriesData);
   
-  // Handle responses
-  posts = postsData || [];
-  menuItems = menuData || [];
-  settingsData = settingsResponse || {};
+  // Process responses
+  if (postsData && Array.isArray(postsData)) {
+    posts = postsData;
+  }
   
-  // Mapear los elementos del menú al formato esperado por BlogLayout
-  mappedMenuItems = menuItems.map((item: any): MenuItemForLayout => ({
-    label: item.label || item.title || item.name || 'Link',
-    url: item.url || `/${item.slug || ''}`,
-    active: item.url === '/' || false // No podemos usar window en SSR
-  }));
-  categories = categoriesData?.categories || categoriesData || [];
+  if (menuData && Array.isArray(menuData)) {
+    menuItems = menuData;
+    // Mapear los elementos del menú al formato esperado por BlogLayout
+    mappedMenuItems = menuItems.map((item): MenuItemForLayout => ({
+      label: item.label || item.title || item.name || 'Link',
+      url: item.url || `/${item.slug || ''}`,
+      active: item.url === '/' || false
+    }));
+  }
+  
+  if (settingsResponse) {
+    settingsData = settingsResponse;
+  }
+  
+  if (categoriesData && Array.isArray(categoriesData)) {
+    categories = categoriesData;
+  } else if (categoriesData?.categories && Array.isArray(categoriesData.categories)) {
+    categories = categoriesData.categories;
+  }
   
 } catch (error) {
   console.error('API Error:', error);
-  // Fallback data remains the same
-  menuItems = [
-    { label: 'Inicio', url: '/' },
-    { label: 'Blog', url: '/blog' },
-    { label: 'Acerca', url: '/about' }
+}
+
+// Add fallback menu items if API fails
+if (mappedMenuItems.length === 0) {
+  mappedMenuItems = [
+    { label: 'Inicio', url: '/', active: true },
+    { label: 'Blog', url: '/blog', active: false },
+    { label: 'Acerca', url: '/about', active: false }
   ];
+}
+
+if (categories.length === 0) {
   categories = [
     { id: 1, name: 'Tecnología', slug: 'tech' },
     { id: 2, name: 'Diseño', slug: 'design' }
   ];
 }
 
-// Helper function to parse dates safely
-function parseDate(dateString: string | undefined): Date | null {
-  if (!dateString) return null;
+// Helper function to format dates
+function formatDate(dateString: string): string {
+  if (!dateString) return '';
   
   try {
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) {
-      return null;
-    }
-    return date;
+    return date.toLocaleDateString('es-ES', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
   } catch (e) {
-    return null;
+    return '';
   }
 }
-
-// Add fallback menu items if API fails
-if (menuItems.length === 0) {
-  // Crear directamente los elementos mapeados para el layout
-  mappedMenuItems = [
-    { label: 'Home', url: '/', active: true },
-    { label: 'Categories', url: '/categories', active: false },
-    { label: 'About', url: '/about', active: false },
-    { label: 'Contact', url: '/contact', active: false }
-  ];
-}
-
-if (categories.length === 0) {
-  categories = [
-    { id: 1, name: 'Technology', slug: 'technology' },
-    { id: 2, name: 'Lifestyle', slug: 'lifestyle' },
-    { id: 3, name: 'Travel', slug: 'travel' }
-  ];
-}
-
 ---
+
 <BlogLayout 
   title={settingsData?.title || 'Mi Blog'}
   description={settingsData?.description || '... a minimalistic theme focused on readability.'}
-  blogTitle={settingsData?.title || 'Read'}
+  blogTitle={settingsData?.blogTitle || settingsData?.title || 'Read'}
   menuItems={mappedMenuItems}
+  settings={settingsData}
 >
   <div class="content-wrapper">
     {categories.length > 0 && (
@@ -190,13 +165,15 @@ if (categories.length === 0) {
           {posts.map(post => (
             <article class="post">
               <header class="post-header">
-                <h2 class="post-title"><a href={`/blog/${post.id}`}>{post.title}</a></h2>
+                <h2 class="post-title">
+                  <a href={`/blog/${post.slug || post.id}`}>{post.title}</a>
+                </h2>
                 <div class="post-meta">
-                  {new Date(post.createdAt).toLocaleDateString('es-ES', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
+                  {post.publishedAt && (
+                    <time datetime={post.publishedAt}>
+                      {formatDate(post.publishedAt)}
+                    </time>
+                  )}
                   
                   {post.category && (
                     <span class="post-categories">
@@ -210,8 +187,8 @@ if (categories.length === 0) {
               
               {post.image && (
                 <div class="post-image">
-                  <a href={`/blog/${post.id}`}>
-                    <img src={`https://taita-api.onrender.com/${post.image}`} alt={post.title} loading="lazy" />
+                  <a href={`/blog/${post.slug || post.id}`}>
+                    <img src={`${import.meta.env.PUBLIC_IMAGE_BASE_URL}/${post.image}`} alt={post.title} loading="lazy" />
                   </a>
                 </div>
               )}
@@ -220,54 +197,101 @@ if (categories.length === 0) {
                 {post.excerpt || post.content.substring(0, 250) + '...'}
               </div>
               
-              <a href={`/blog/${post.id}`} class="read-more">Seguir leyendo →</a>
+              <a href={`/blog/${post.slug || post.id}`} class="read-more">Seguir leyendo →</a>
             </article>
           ))}
         </div>
       ) : (
-        <p>No posts found.</p>
+        <div class="no-posts">
+          <p>No se encontraron posts. Comienza a crear contenido en tu CMS.</p>
+        </div>
       )}
     </div>
   </div>
 </BlogLayout>
 
 <style>
-  .categories-sidebar {
-    background-color: #f0f0f0;
-    padding: 1rem;
-    border: 1px solid #ddd;
-  }
-</style>
-<style>
   .content-wrapper {
     display: grid;
     grid-template-columns: 200px 1fr;
     gap: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
   }
 
-  .categories-sidebar {
+  .categories-section {
+    background-color: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
     position: sticky;
     top: 2rem;
     align-self: start;
+    height: fit-content;
   }
 
-  .categories-sidebar ul {
+  .categories-section h2 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+  }
+
+  .categories-list {
     list-style: none;
     padding: 0;
-    margin: 1rem 0 0;
+    margin: 0;
   }
 
-  .categories-sidebar li {
+  .categories-list li {
+    margin-bottom: 0.8rem;
+  }
+
+  .categories-list a {
+    text-decoration: none;
+    color: #555;
+    transition: color 0.2s;
+  }
+
+  .categories-list a:hover {
+    color: #0066cc;
+  }
+
+  .post {
+    margin-bottom: 3rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid #eee;
+  }
+
+  .post-title {
+    font-size: 1.8rem;
     margin-bottom: 0.5rem;
   }
 
-  .categories-sidebar a {
+  .post-title a {
+    color: inherit;
     text-decoration: none;
-    color: var(--text-secondary);
+    transition: color 0.2s;
   }
 
-  .categories-sidebar a:hover {
-    color: var(--text-primary);
+  .post-title a:hover {
+    color: #0066cc;
+  }
+
+  .post-meta {
+    color: #666;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    display: flex;
+    gap: 1rem;
+  }
+
+  .post-categories a {
+    color: #0066cc;
+    text-decoration: none;
+  }
+
+  .post-categories a:hover {
+    text-decoration: underline;
   }
 
   .post-image {
@@ -289,9 +313,27 @@ if (categories.length === 0) {
   
   .post-excerpt {
     margin-bottom: 1.5rem;
-    font-family: var(--sans-font);
-    color: var(--text-color);
+    color: #444;
     line-height: 1.6;
+  }
+
+  .read-more {
+    display: inline-block;
+    color: #0066cc;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+
+  .read-more:hover {
+    color: #004c99;
+  }
+
+  .no-posts {
+    background-color: #f8f9fa;
+    padding: 3rem;
+    text-align: center;
+    border-radius: 8px;
   }
 
   @media (max-width: 768px) {
@@ -299,9 +341,9 @@ if (categories.length === 0) {
       grid-template-columns: 1fr;
     }
     
-    .categories-sidebar {
+    .categories-section {
       position: static;
-      order: -1;
+      margin-bottom: 2rem;
     }
   }
 </style>

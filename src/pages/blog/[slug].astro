@@ -1,191 +1,62 @@
 ---
 import BlogLayout from '../../layouts/BlogLayout.astro';
-
-// Configuración para renderizado en el servidor
-
-// Definir la interfaz para el tipo Post
-interface Post {
-  id: number;
-  title: string;
-  content: string;
-  excerpt?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  publishedAt: string;
-  image?: string;
-  slug: string;
-  category?: {
-    id: number;
-    name: string;
-    slug: string;
-  };
-  author?: {
-    id: number;
-    name: string;
-    email?: string;
-    bio?: string;
-    avatar?: string;
-  };
-}
-
-interface MenuItem {
-  id: number;
-  label: string;
-  url: string;
-  order: number;
-}
-
-interface MenuItemForLayout {
-  label: string;
-  url: string;
-  active: boolean;
-}
-
-interface Settings {
-  title: string;
-  description: string;
-}
+import { getTenantInfo, fetchTenantData } from '../../utils/tenant.js';
 
 export const prerender = false;
 
-// Generar rutas estáticas para cada post
-export function getStaticPaths() {
-  // Usar datos estáticos de fallback para evitar problemas de conexión con la API durante el build
-  // Esto garantiza que el sitio se pueda construir sin depender de la API
-  const fallbackPosts: Post[] = [
-    { 
-      id: 1, 
-      title: 'Primer post de ejemplo', 
-      content: 'Este es el contenido del primer post de ejemplo.', 
-      publishedAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      slug: 'primer-post-de-ejemplo',
-      category: { id: 1, name: 'General', slug: 'general' },
-      author: { id: 1, name: 'Admin' },
-      image: 'https://via.placeholder.com/800x400'
-    },
-    { 
-      id: 2, 
-      title: 'Segundo post', 
-      content: 'Contenido del segundo post.', 
-      publishedAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      slug: 'segundo-post',
-      category: { id: 2, name: 'Tecnología', slug: 'tecnologia' },
-      author: { id: 1, name: 'Admin' },
-      image: 'https://via.placeholder.com/800x400'
-    }
-  ];
-  
-  return fallbackPosts.map((post) => ({
-    params: { slug: post.slug },
-    props: { post }
-  }));
-}
-
-// Datos de fallback para el build
-const fallbackMenuData: MenuItem[] = [
-  { id: 1, label: 'Home', url: '/', order: 1 },
-  { id: 2, label: 'Blog', url: '/blog', order: 2 },
-  { id: 3, label: 'Categories', url: '/categories', order: 3 },
-  { id: 4, label: 'About', url: '/about', order: 4 }
-];
-
-const fallbackSettingsData: Settings = {
-  title: 'Taita Blog',
-  description: 'A simple blog built with Astro'
-};
-
-// Obtener el post desde la API usando el slug
+// Get tenant information from request
+const tenantInfo = getTenantInfo(Astro.request);
 const { slug } = Astro.params;
-let post;
+
+// Fetch data using tenant information
+let post = null;
+let menuItems = [];
+let settings = {};
+let comments = [];
 
 try {
-  // Obtener el host para determinar el blog
-  const host = Astro.request.headers.get('host') || '';
-  console.log('Host en [slug].astro:', host);
+  // Fetch post, menu, settings in parallel
+  const [postData, menuData, settingsData] = await Promise.all([
+    fetchTenantData(`/posts/public/slug/${slug}`, tenantInfo),
+    fetchTenantData('/menu/public', tenantInfo),
+    fetchTenantData('/settings/public', tenantInfo)
+  ]);
   
-  // Obtener el post desde la API
-  const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000';
-  console.log('Obteniendo post con slug:', slug);
-  console.log('URL completa:', `${apiUrl}/api/posts/public/slug/${slug}`);
+  console.log('Respuesta del post:', postData);
+  console.log('Respuesta del menú:', menuData);
+  console.log('Respuesta de configuración:', settingsData);
   
-  const response = await fetch(`${apiUrl}/api/posts/public/slug/${slug}`, {
-    headers: {
-      'Accept': 'application/json',
-      'Host': host
-    }
-  });
-  
-  // Debug la respuesta
-  const responseText = await response.text();
-  console.log('Respuesta cruda:', responseText);
-  
-  if (!response.ok) {
-    throw new Error(`Error al obtener el post: ${response.status}`);
+  // Process post data - it might come as an array with one item
+  if (postData) {
+    post = Array.isArray(postData) && postData.length > 0 
+      ? postData[0] 
+      : postData;
   }
   
-  // Convertir el texto de respuesta a JSON
-  const posts = JSON.parse(responseText);
-  console.log('Posts obtenidos:', posts);
+  // Process menu data
+  if (menuData && Array.isArray(menuData)) {
+    menuItems = menuData.map(item => ({
+      label: item.label,
+      url: item.url,
+      active: item.url === `/blog/${slug}`
+    }));
+  }
   
-  // Verificar si se encontró un post
-  if (posts && posts.length > 0) {
-    post = posts[0];
-    console.log('Post encontrado:', post);
-  } else {
-    console.log('No se encontró ningún post, usando fallback');
-    // Si no se encuentra el post, usar los datos de fallback
-    post = Astro.props.post;
+  // Process settings
+  if (settingsData) {
+    settings = settingsData;
   }
 } catch (error) {
-  console.error('Error al obtener el post:', error);
-  // Usar los datos de fallback en caso de error
-  post = Astro.props.post;
+  console.error('Error al obtener datos:', error);
 }
 
-// Obtener menú y configuración desde la API
-let menuData = fallbackMenuData;
-let settingsData = fallbackSettingsData;
-
-try {
-  const host = Astro.request.headers.get('host') || '';
-  const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000';
-  
-  // Obtener menú
-  const menuResponse = await fetch(`${apiUrl}/api/menu/public`, {
-    headers: {
-      'Host': host
-    }
-  });
-  
-  if (menuResponse.ok) {
-    menuData = await menuResponse.json();
-  }
-  
-  // Obtener configuración
-  const settingsResponse = await fetch(`${apiUrl}/api/settings/public`, {
-    headers: {
-      'Host': host
-    }
-  });
-  
-  if (settingsResponse.ok) {
-    settingsData = await settingsResponse.json();
-  }
-} catch (error) {
-  console.error('Error al obtener datos de la API:', error);
+// Handle 404 - post not found
+if (!post) {
+  return Astro.redirect('/404');
 }
 
-// Procesar elementos del menú para el layout
-const mappedMenuItems: MenuItemForLayout[] = menuData.map((item) => ({
-  label: item.label,
-  url: item.url,
-  active: item.url === `/blog/${slug}`
-}));
-
-// Función para formatear fechas
-function formatDate(dateString: string | undefined): string {
+// Helper function to format dates
+function formatDate(dateString) {
   if (!dateString) return '';
   const date = new Date(dateString);
   return date.toLocaleDateString('es-ES', {
@@ -198,9 +69,14 @@ function formatDate(dateString: string | undefined): string {
 const formattedDate = formatDate(post.publishedAt);
 ---
 
-<BlogLayout title={post.title} menuItems={mappedMenuItems} settings={settingsData}>
-  <article class="post-content">
-    <header>
+<BlogLayout 
+  title={post.title} 
+  description={post.excerpt || post.content.substring(0, 155)}
+  menuItems={menuItems}
+  settings={settings}
+>
+  <article class="post">
+    <header class="post-header">
       <h1>{post.title}</h1>
       <div class="post-meta">
         <time datetime={post.publishedAt}>{formattedDate}</time>
@@ -214,20 +90,18 @@ const formattedDate = formatDate(post.publishedAt);
     
     {post.image && (
       <div class="featured-image">
-        <img src={post.image} alt={post.title} />
+        <img src={`${import.meta.env.PUBLIC_IMAGE_BASE_URL}/${post.image}`} alt={post.title} />
       </div>
     )}
     
-    <div class="content">
-      {post.content}
-    </div>
+    <div class="content" set:html={post.content} />
     
     {post.author && (
       <div class="author-bio">
         <h3>Sobre el autor</h3>
         <div class="author-info">
-          {post.author.avatar && (
-            <img src={post.author.avatar} alt={post.author.name} class="author-avatar" />
+          {post.author.picture && (
+            <img src={`${import.meta.env.PUBLIC_IMAGE_BASE_URL}/${post.author.picture}`} alt={post.author.name} class="author-avatar" />
           )}
           <div>
             <h4>{post.author.name}</h4>
@@ -240,22 +114,25 @@ const formattedDate = formatDate(post.publishedAt);
 </BlogLayout>
 
 <style>
-  .post-content {
+  .post {
     max-width: 800px;
     margin: 0 auto;
     padding: 2rem 1rem;
   }
   
+  .post-header {
+    margin-bottom: 2rem;
+  }
+  
   h1 {
     font-size: 2.5rem;
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
   }
   
   .post-meta {
     display: flex;
     gap: 1rem;
     color: #666;
-    margin-bottom: 2rem;
     font-size: 0.9rem;
   }
   
@@ -269,25 +146,56 @@ const formattedDate = formatDate(post.publishedAt);
   }
   
   .featured-image {
-    margin: 0 -1rem 2rem;
+    margin: 2rem 0;
+    border-radius: 8px;
     overflow: hidden;
   }
   
   .featured-image img {
     width: 100%;
     height: auto;
-    object-fit: cover;
+    display: block;
   }
   
   .content {
-    line-height: 1.6;
-    color: #333;
+    line-height: 1.7;
+    font-size: 1.1rem;
+  }
+  
+  .content h2 {
+    font-size: 1.8rem;
+    margin: 2rem 0 1rem;
+  }
+  
+  .content h3 {
+    font-size: 1.5rem;
+    margin: 1.8rem 0 0.8rem;
+  }
+  
+  .content p {
+    margin-bottom: 1.5rem;
+  }
+  
+  .content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    margin: 2rem 0;
+  }
+  
+  .content blockquote {
+    border-left: 4px solid #0066cc;
+    padding-left: 1rem;
+    margin-left: 0;
+    color: #555;
+    font-style: italic;
   }
   
   .author-bio {
     margin-top: 3rem;
-    padding-top: 2rem;
-    border-top: 1px solid #eee;
+    padding: 1.5rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
   }
   
   .author-info {
@@ -297,9 +205,20 @@ const formattedDate = formatDate(post.publishedAt);
   }
   
   .author-avatar {
-    width: 60px;
-    height: 60px;
+    width: 80px;
+    height: 80px;
     border-radius: 50%;
     object-fit: cover;
+  }
+  
+  @media (max-width: 768px) {
+    h1 {
+      font-size: 2rem;
+    }
+    
+    .author-info {
+      flex-direction: column;
+      text-align: center;
+    }
   }
 </style>
