@@ -1,0 +1,195 @@
+---
+// src/pages/proxy-test.astro - Página para probar el proxy
+---
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prueba de Proxy</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 2rem;
+      line-height: 1.5;
+    }
+    
+    h1, h2 {
+      margin-top: 2rem;
+    }
+    
+    pre {
+      background-color: #f5f5f5;
+      padding: 1rem;
+      border-radius: 4px;
+      overflow: auto;
+    }
+    
+    button {
+      padding: 0.5rem 1rem;
+      background-color: #0066cc;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    
+    .success { color: green; }
+    .error { color: red; }
+    
+    .buttons {
+      margin: 1rem 0;
+    }
+    
+    .section {
+      margin-top: 2rem;
+      padding: 1.5rem;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Prueba de Proxy</h1>
+  <p>Esta página utiliza el endpoint /api/proxy para evitar problemas de CORS.</p>
+  
+  <div class="section">
+    <h2>Probar Proxy</h2>
+    <div class="buttons">
+      <button id="btn-posts">Obtener Posts</button>
+      <button id="btn-menu">Obtener Menú</button>
+      <button id="btn-settings">Obtener Settings</button>
+    </div>
+    <div id="proxy-results">
+      <p>Haz clic en un botón para probar...</p>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2>Probar con Diferentes Subdominios</h2>
+    <div class="buttons">
+      <button id="btn-demo">Subdominio: demo</button>
+      <button id="btn-default">Subdominio: default</button>
+      <button id="btn-test">Subdominio: test</button>
+    </div>
+    <div id="subdomain-results">
+      <p>Haz clic en un botón para probar...</p>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2>Información de la Solicitud</h2>
+    <pre id="request-info">No hay información disponible.</pre>
+  </div>
+
+  <script>
+    // Función para actualizar la información de la solicitud
+    function updateRequestInfo(info) {
+      document.getElementById('request-info').textContent = JSON.stringify(info, null, 2);
+    }
+    
+    // Función para hacer solicitudes al proxy
+    async function fetchFromProxy(endpoint, subdomain) {
+      const resultsContainer = document.getElementById('proxy-results');
+      resultsContainer.innerHTML = '<p>Cargando...</p>';
+      
+      const requestInfo = {
+        endpoint,
+        subdomain,
+        timestamp: new Date().toISOString()
+      };
+      
+      updateRequestInfo(requestInfo);
+      
+      try {
+        const url = `/api/proxy?endpoint=${encodeURIComponent(endpoint)}&subdomain=${encodeURIComponent(subdomain)}`;
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(`Error: ${response.status} - ${errorData.error || 'Desconocido'}`);
+        }
+        
+        const data = await response.json();
+        
+        requestInfo.status = response.status;
+        requestInfo.success = true;
+        updateRequestInfo(requestInfo);
+        
+        resultsContainer.innerHTML = `
+          <p class="success">✅ Éxito al obtener ${endpoint}</p>
+          <p>Tipo: ${Array.isArray(data) ? 'Array' : typeof data}</p>
+          <p>Cantidad: ${Array.isArray(data) ? data.length : 'N/A'}</p>
+          <pre>${JSON.stringify(Array.isArray(data) ? data.slice(0, 2) : data, null, 2)}</pre>
+        `;
+      } catch (error) {
+        requestInfo.status = 'error';
+        requestInfo.error = error.message;
+        updateRequestInfo(requestInfo);
+        
+        resultsContainer.innerHTML = `
+          <p class="error">❌ Error: ${error.message}</p>
+        `;
+      }
+    }
+    
+    // Función para probar con diferentes subdominios
+    async function testWithSubdomain(subdomain) {
+      const resultsContainer = document.getElementById('subdomain-results');
+      resultsContainer.innerHTML = '<p>Cargando...</p>';
+      
+      const requestInfo = {
+        endpoint: '/posts/public',
+        subdomain,
+        timestamp: new Date().toISOString()
+      };
+      
+      updateRequestInfo(requestInfo);
+      
+      try {
+        const url = `/api/proxy?endpoint=${encodeURIComponent('/posts/public')}&subdomain=${encodeURIComponent(subdomain)}`;
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(`Error: ${response.status} - ${errorData.error || 'Desconocido'}`);
+        }
+        
+        const data = await response.json();
+        
+        requestInfo.status = response.status;
+        requestInfo.success = true;
+        updateRequestInfo(requestInfo);
+        
+        resultsContainer.innerHTML = `
+          <p class="success">✅ Éxito con subdominio: ${subdomain}</p>
+          <p>Cantidad de posts: ${Array.isArray(data) ? data.length : 'N/A'}</p>
+          <pre>${JSON.stringify(Array.isArray(data) ? data.slice(0, 2) : data, null, 2)}</pre>
+        `;
+      } catch (error) {
+        requestInfo.status = 'error';
+        requestInfo.error = error.message;
+        updateRequestInfo(requestInfo);
+        
+        resultsContainer.innerHTML = `
+          <p class="error">❌ Error con subdominio ${subdomain}: ${error.message}</p>
+        `;
+      }
+    }
+    
+    // Configurar los botones
+    document.getElementById('btn-posts').addEventListener('click', () => fetchFromProxy('/posts/public', 'demo'));
+    document.getElementById('btn-menu').addEventListener('click', () => fetchFromProxy('/menu/public', 'demo'));
+    document.getElementById('btn-settings').addEventListener('click', () => fetchFromProxy('/settings/public', 'demo'));
+    
+    document.getElementById('btn-demo').addEventListener('click', () => testWithSubdomain('demo'));
+    document.getElementById('btn-default').addEventListener('click', () => testWithSubdomain('default'));
+    document.getElementById('btn-test').addEventListener('click', () => testWithSubdomain('test'));
+  </script>
+</body>
+</html>

@@ -1,0 +1,261 @@
+---
+// src/pages/debug.astro - Página específica para depuración
+import { getTenantInfo, fetchTenantData } from '../utils/tenant.js';
+
+export const prerender = false;
+
+// Get tenant information from request
+const tenantInfo = getTenantInfo(Astro.request);
+console.log('⚠️ DEBUG PAGE - Tenant Info:', tenantInfo);
+
+// URLs para probar
+const testEndpoints = [
+  '/posts/public',
+  '/menu/public',
+  '/settings/public',
+  '/categories/public'
+];
+
+const apiResults = {};
+const rawResponses = {};
+
+// Test directo de subdominios
+const testSubdomains = ['demo', 'default', 'test', ''];
+
+const subdomainResults = {};
+
+// Probar cada endpoint
+for (const endpoint of testEndpoints) {
+  try {
+    console.log(`⚠️ DEBUG PAGE - Probando endpoint: ${endpoint}`);
+    const startTime = Date.now();
+    const data = await fetchTenantData(endpoint, tenantInfo);
+    const timeElapsed = Date.now() - startTime;
+    
+    apiResults[endpoint] = {
+      success: !!data,
+      timeElapsed,
+      dataType: typeof data,
+      isArray: Array.isArray(data),
+      itemCount: Array.isArray(data) ? data.length : (data && typeof data === 'object' ? Object.keys(data).length : 0),
+      firstItem: Array.isArray(data) ? data[0] : null
+    };
+    
+    // Guardar una versión reducida de la respuesta
+    rawResponses[endpoint] = data ? 
+      (Array.isArray(data) ? 
+        data.slice(0, 2).map(item => ({...item, content: item.content ? `${item.content.substring(0, 100)}...` : null})) : 
+        (typeof data === 'object' ? {...data} : data)
+      ) : null;
+      
+  } catch (error) {
+    console.error(`⚠️ DEBUG PAGE - Error al probar endpoint ${endpoint}:`, error);
+    apiResults[endpoint] = {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// Probar cada subdominio
+for (const subdomain of testSubdomains) {
+  try {
+    console.log(`⚠️ DEBUG PAGE - Probando subdominio: ${subdomain || '(vacío)'}`);
+    const customTenantInfo = {...tenantInfo, subdomain};
+    const startTime = Date.now();
+    const data = await fetchTenantData('/posts/public', customTenantInfo);
+    const timeElapsed = Date.now() - startTime;
+    
+    subdomainResults[subdomain || '(vacío)'] = {
+      success: !!data,
+      timeElapsed,
+      dataType: typeof data,
+      isArray: Array.isArray(data),
+      itemCount: Array.isArray(data) ? data.length : 0
+    };
+    
+    if (Array.isArray(data) && data.length > 0) {
+      subdomainResults[subdomain || '(vacío)'].titles = data.slice(0, 3).map(post => post.title);
+    }
+      
+  } catch (error) {
+    console.error(`⚠️ DEBUG PAGE - Error al probar subdominio ${subdomain}:`, error);
+    subdomainResults[subdomain || '(vacío)'] = {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// Environment info
+const envInfo = {
+  PUBLIC_API_URL: import.meta.env.PUBLIC_API_URL,
+  PUBLIC_IMAGE_BASE_URL: import.meta.env.PUBLIC_IMAGE_BASE_URL,
+  NODE_ENV: import.meta.env.NODE_ENV,
+  MODE: import.meta.env.MODE,
+  BASE_URL: import.meta.env.BASE_URL
+};
+
+console.log('⚠️ DEBUG PAGE - Finalizado con resultados:', {
+  apiResults,
+  subdomainResults
+});
+---
+
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Página de Diagnóstico - Taita Frontend</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.5;
+      padding: 2rem;
+      max-width: 1200px;
+      margin: 0 auto;
+      color: #333;
+    }
+    
+    h1 {
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .section {
+      margin-bottom: 3rem;
+      padding: 1.5rem;
+      border-radius: 8px;
+      background-color: #f9f9f9;
+    }
+    
+    .success { color: green; }
+    .error { color: red; }
+    
+    pre {
+      background-color: #f0f0f0;
+      padding: 1rem;
+      border-radius: 4px;
+      overflow: auto;
+      font-size: 0.9rem;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1rem;
+    }
+    
+    th, td {
+      border: 1px solid #ddd;
+      padding: 0.5rem;
+      text-align: left;
+    }
+    
+    th {
+      background-color: #f0f0f0;
+    }
+    
+    .toggle-btn {
+      background-color: #eee;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-bottom: 0.5rem;
+    }
+    
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Página de Diagnóstico - Taita Frontend</h1>
+  
+  <div class="section">
+    <h2>Información del Tenant</h2>
+    <pre>{JSON.stringify(tenantInfo, null, 2)}</pre>
+  </div>
+  
+  <div class="section">
+    <h2>Variables de Entorno</h2>
+    <pre>{JSON.stringify(envInfo, null, 2)}</pre>
+  </div>
+  
+  <div class="section">
+    <h2>Resultados de API por Endpoint</h2>
+    <table>
+      <tr>
+        <th>Endpoint</th>
+        <th>Estado</th>
+        <th>Tiempo (ms)</th>
+        <th>Tipo</th>
+        <th>Items</th>
+        <th>Acciones</th>
+      </tr>
+      {Object.entries(apiResults).map(([endpoint, result]) => (
+        <tr>
+          <td>{endpoint}</td>
+          <td class={result.success ? 'success' : 'error'}>
+            {result.success ? 'Éxito' : `Error: ${result.error || 'Desconocido'}`}
+          </td>
+          <td>{result.timeElapsed || 'N/A'}</td>
+          <td>{result.isArray ? 'Array' : result.dataType}</td>
+          <td>{result.itemCount ?? 'N/A'}</td>
+          <td>
+            <button class="toggle-btn" onclick={`toggleData('${endpoint}')`}>
+              Ver datos
+            </button>
+          </td>
+        </tr>
+      ))}
+    </table>
+    
+    {Object.entries(rawResponses).map(([endpoint, data]) => (
+      <div id={`data-${endpoint}`} class="data-container hidden">
+        <h3>Datos para {endpoint}</h3>
+        <pre>{JSON.stringify(data, null, 2)}</pre>
+      </div>
+    ))}
+  </div>
+  
+  <div class="section">
+    <h2>Prueba de Subdominios</h2>
+    <table>
+      <tr>
+        <th>Subdominio</th>
+        <th>Estado</th>
+        <th>Tiempo (ms)</th>
+        <th>Tipo</th>
+        <th>Posts</th>
+        <th>Títulos</th>
+      </tr>
+      {Object.entries(subdomainResults).map(([subdomain, result]) => (
+        <tr>
+          <td>{subdomain}</td>
+          <td class={result.success ? 'success' : 'error'}>
+            {result.success ? 'Éxito' : `Error: ${result.error || 'Desconocido'}`}
+          </td>
+          <td>{result.timeElapsed || 'N/A'}</td>
+          <td>{result.isArray ? 'Array' : result.dataType}</td>
+          <td>{result.itemCount ?? 'N/A'}</td>
+          <td>
+            {result.titles ? result.titles.join(', ') : 'N/A'}
+          </td>
+        </tr>
+      ))}
+    </table>
+  </div>
+
+  <script>
+    function toggleData(endpoint) {
+      const container = document.getElementById(`data-${endpoint}`);
+      if (container) {
+        container.classList.toggle('hidden');
+      }
+    }
+  </script>
+</body>
+</html>

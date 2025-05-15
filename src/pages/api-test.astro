@@ -1,0 +1,269 @@
+---
+// src/pages/api-test.astro - Página de prueba directa a la API sin dependencias
+
+export const prerender = false;
+
+// Host y subdomain
+const host = Astro.request.headers.get('host') || 'localhost:4321';
+const subdomain = host.includes('.') ? host.split('.')[0] : 'demo';
+
+// Información general
+const baseInfo = {
+  host,
+  subdomain,
+  url: Astro.request.url,
+  date: new Date().toISOString()
+};
+
+// Variables de entorno
+const envInfo = {
+  PUBLIC_API_URL: import.meta.env.PUBLIC_API_URL || 'No definido',
+  PUBLIC_IMAGE_BASE_URL: import.meta.env.PUBLIC_IMAGE_BASE_URL || 'No definido',
+  NODE_ENV: import.meta.env.NODE_ENV || 'No definido'
+};
+
+// Resultados de pruebas de API
+let apiResults = {};
+let error = null;
+
+try {
+  // Construir la URL de la API directamente
+  const apiUrl = `${envInfo.PUBLIC_API_URL}/posts/public?subdomain=${subdomain}`;
+  
+  console.log('🔍 api-test - Realizando solicitud a:', apiUrl);
+  console.log('🔍 api-test - Headers:', {
+    'Accept': 'application/json',
+    'Host': host,
+    'X-Taita-Subdomain': subdomain
+  });
+  
+  // Hacer la solicitud directa sin utilidades
+  const response = await fetch(apiUrl, {
+    headers: {
+      'Accept': 'application/json',
+      'Host': host,
+      'X-Taita-Subdomain': subdomain
+    }
+  });
+  
+  console.log('🔍 api-test - Código de estado:', response.status);
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Error en la API: ${response.status} - ${errorText}`);
+  }
+  
+  const data = await response.json();
+  
+  apiResults = {
+    success: true,
+    status: response.status,
+    dataType: typeof data,
+    isArray: Array.isArray(data),
+    count: Array.isArray(data) ? data.length : 0,
+    data: Array.isArray(data) ? data.slice(0, 3) : data
+  };
+  
+  console.log('🔍 api-test - Resultados:', {
+    success: apiResults.success,
+    count: apiResults.count
+  });
+  
+} catch (e) {
+  console.error('🔍 api-test - Error al realizar solicitud:', e);
+  error = {
+    message: e.message,
+    stack: e.stack
+  };
+  apiResults = {
+    success: false,
+    error: e.message
+  };
+}
+
+// Probar otra subdominio directamente
+let demoResults = {};
+
+try {
+  // Construir la URL de la API directamente para el subdomain demo
+  const apiUrl = `${envInfo.PUBLIC_API_URL}/posts/public?subdomain=demo`;
+  
+  console.log('🔍 api-test - Realizando solicitud para subdomain demo:', apiUrl);
+  
+  // Hacer la solicitud directa sin utilidades
+  const response = await fetch(apiUrl, {
+    headers: {
+      'Accept': 'application/json',
+      'X-Taita-Subdomain': 'demo'
+    }
+  });
+  
+  console.log('🔍 api-test - (demo) Código de estado:', response.status);
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Error en la API (demo): ${response.status} - ${errorText}`);
+  }
+  
+  const data = await response.json();
+  
+  demoResults = {
+    success: true,
+    status: response.status,
+    dataType: typeof data,
+    isArray: Array.isArray(data),
+    count: Array.isArray(data) ? data.length : 0,
+    data: Array.isArray(data) ? data.slice(0, 3) : data
+  };
+  
+  console.log('🔍 api-test - (demo) Resultados:', {
+    success: demoResults.success,
+    count: demoResults.count
+  });
+  
+} catch (e) {
+  console.error('🔍 api-test - (demo) Error al realizar solicitud:', e);
+  demoResults = {
+    success: false,
+    error: e.message
+  };
+}
+---
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prueba Directa de API</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      line-height: 1.5;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    
+    h1, h2 {
+      margin-top: 2rem;
+      margin-bottom: 1rem;
+    }
+    
+    pre {
+      background-color: #f1f1f1;
+      padding: 1rem;
+      border-radius: 4px;
+      overflow: auto;
+    }
+    
+    .success { color: green; }
+    .error { color: red; }
+    
+    .section {
+      margin: 2rem 0;
+      padding: 1.5rem;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Prueba Directa de API</h1>
+  <p>Esta página realiza solicitudes directas a la API sin usar utilidades.</p>
+  
+  <div class="section">
+    <h2>Información Básica</h2>
+    <pre>{JSON.stringify(baseInfo, null, 2)}</pre>
+  </div>
+  
+  <div class="section">
+    <h2>Variables de Entorno</h2>
+    <pre>{JSON.stringify(envInfo, null, 2)}</pre>
+  </div>
+  
+  <div class="section">
+    <h2>Resultados de la API para Subdomain: {baseInfo.subdomain}</h2>
+    <p class={apiResults.success ? 'success' : 'error'}>
+      Estado: {apiResults.success ? '✅ Éxito' : '❌ Error: ' + apiResults.error}
+    </p>
+    {apiResults.success && (
+      <div>
+        <p>Tipo de datos: {apiResults.isArray ? 'Array' : apiResults.dataType}</p>
+        <p>Cantidad de items: {apiResults.count}</p>
+        <h3>Muestra de datos:</h3>
+        <pre>{JSON.stringify(apiResults.data, null, 2)}</pre>
+      </div>
+    )}
+    
+    {!apiResults.success && error && (
+      <div>
+        <h3>Detalles del error:</h3>
+        <pre>{JSON.stringify(error, null, 2)}</pre>
+      </div>
+    )}
+  </div>
+  
+  <div class="section">
+    <h2>Resultados forzando Subdomain: "demo"</h2>
+    <p class={demoResults.success ? 'success' : 'error'}>
+      Estado: {demoResults.success ? '✅ Éxito' : '❌ Error: ' + demoResults.error}
+    </p>
+    {demoResults.success && (
+      <div>
+        <p>Tipo de datos: {demoResults.isArray ? 'Array' : demoResults.dataType}</p>
+        <p>Cantidad de items: {demoResults.count}</p>
+        <h3>Muestra de datos:</h3>
+        <pre>{JSON.stringify(demoResults.data, null, 2)}</pre>
+      </div>
+    )}
+  </div>
+
+  <div class="section">
+    <h2>Pruebas desde el cliente (navegador)</h2>
+    <p>Resultados de la prueba de fetch desde JavaScript del navegador:</p>
+    <div id="client-test-results">Cargando...</div>
+    <button id="run-test">Ejecutar prueba</button>
+  </div>
+
+  <script>
+    // Prueba adicional desde el lado del cliente
+    document.getElementById('run-test').addEventListener('click', async () => {
+      const resultsContainer = document.getElementById('client-test-results');
+      resultsContainer.innerHTML = 'Ejecutando prueba...';
+      
+      try {
+        const subdomain = window.location.host.includes('.') ? 
+          window.location.host.split('.')[0] : 'demo';
+          
+        const apiUrl = '/api/posts/public?subdomain=' + subdomain;
+        
+        const response = await fetch(apiUrl, {
+          headers: {
+            'Accept': 'application/json',
+            'X-Taita-Subdomain': subdomain
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Error en la API: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        resultsContainer.innerHTML = `
+          <p class="success">✅ Éxito</p>
+          <p>Tipo: ${Array.isArray(data) ? 'Array' : typeof data}</p>
+          <p>Cantidad: ${Array.isArray(data) ? data.length : 'N/A'}</p>
+          <pre>${JSON.stringify(Array.isArray(data) ? data.slice(0, 2) : data, null, 2)}</pre>
+        `;
+      } catch (error) {
+        resultsContainer.innerHTML = `
+          <p class="error">❌ Error: ${error.message}</p>
+          <pre>${error.stack || 'No hay stack trace disponible'}</pre>
+        `;
+      }
+    });
+  </script>
+</body>
+</html>

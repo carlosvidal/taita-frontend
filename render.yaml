@@ -13,11 +13,13 @@ services:
       - key: NODE_ENV
         value: production
       - key: DEBUG_MODE
-        value: true
+        value: "true"
+      - key: DEPLOY_VERSION
+        value: "v1.0.1-diagnostico"
     headers:
       - path: /*
         name: Cache-Control
-        value: public, max-age=0, must-revalidate
+        value: no-cache, no-store, must-revalidate
       - path: /uploads/*
         name: Cache-Control
         value: public, max-age=604800, immutable
