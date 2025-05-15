@@ -2,7 +2,6 @@ services:
   - type: web
     name: taita-frontend
     runtime: node
-    plan: starter
     region: oregon
     buildCommand: npm install && npm run build
     startCommand: node ./dist/server/entry.mjs
@@ -11,15 +10,18 @@ services:
         value: https://taita-api.onrender.com/api
       - key: PUBLIC_IMAGE_BASE_URL
         value: https://taita-api.onrender.com
-      - key: NODE_VERSION
-        value: 18
+      - key: NODE_ENV
+        value: production
+      - key: DEBUG_MODE
+        value: true
     headers:
       - path: /*
         name: Cache-Control
-        value: public, max-age=60, stale-while-revalidate=300
+        value: public, max-age=0, must-revalidate
       - path: /uploads/*
         name: Cache-Control
         value: public, max-age=604800, immutable
       - path: /_astro/*
         name: Cache-Control
         value: public, max-age=31536000, immutable
+    plan: starter

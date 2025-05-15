@@ -7,15 +7,19 @@ export const prerender = false;
 // Get tenant information from request
 const tenantInfo = getTenantInfo(Astro.request);
 const { slug } = Astro.params;
+console.log('category-slug.astro - Parámetros:', { slug });
+console.log('category-slug.astro - Tenant info:', tenantInfo);
 
 // Fetch data using tenant information
 let posts = [];
 let menuItems = [];
 let settings = {};
 let category = null;
+let errorMessages = [];
 
 try {
   // Fetch all necessary data in parallel
+  console.log('category-slug.astro - Iniciando fetch de datos para categoría:', slug);
   const [postsData, menuData, settingsData, categoriesData] = await Promise.all([
     fetchTenantData(`/posts/public?categorySlug=${slug}`, tenantInfo),
     fetchTenantData('/menu/public', tenantInfo),
@@ -23,9 +27,18 @@ try {
     fetchTenantData('/categories/public', tenantInfo)
   ]);
   
+  console.log('category-slug.astro - Respuesta de posts:', typeof postsData, Array.isArray(postsData) ? postsData.length : 'no es array');
+  console.log('category-slug.astro - Respuesta de menú:', typeof menuData, Array.isArray(menuData) ? menuData.length : 'no es array');
+  console.log('category-slug.astro - Respuesta de settings:', typeof settingsData);
+  console.log('category-slug.astro - Respuesta de categorías:', typeof categoriesData, Array.isArray(categoriesData) ? categoriesData.length : 'no es array');
+  
   // Process posts
   if (postsData && Array.isArray(postsData)) {
     posts = postsData;
+    console.log('category-slug.astro - Posts procesados:', posts.length);
+  } else {
+    errorMessages.push('No se pudieron obtener los posts');
+    console.log('category-slug.astro - No se pudieron obtener los posts para la categoría:', slug);
   }
   
   // Process menu data
@@ -35,19 +48,39 @@ try {
       url: item.url,
       active: item.url === `/category/${slug}`
     }));
+    console.log('category-slug.astro - Menú procesado:', menuItems.length);
+  } else {
+    errorMessages.push('No se pudo obtener el menú');
+    console.log('category-slug.astro - No se pudo obtener el menú');
   }
   
   // Process settings
   if (settingsData) {
     settings = settingsData;
+    console.log('category-slug.astro - Settings procesados:', Object.keys(settings).join(', '));
+  } else {
+    errorMessages.push('No se pudieron obtener los settings');
+    console.log('category-slug.astro - No se pudieron obtener los settings');
   }
   
   // Find the current category from categories list
-  if (categoriesData && Array.isArray(categoriesData)) {
-    category = categoriesData.find(cat => cat.slug === slug);
+  if (categoriesData) {
+    if (Array.isArray(categoriesData)) {
+      category = categoriesData.find(cat => cat.slug === slug);
+      console.log('category-slug.astro - Buscando categoría en array de categorías:', category ? 'encontrada' : 'no encontrada');
+    } else if (categoriesData.categories && Array.isArray(categoriesData.categories)) {
+      category = categoriesData.categories.find(cat => cat.slug === slug);
+      console.log('category-slug.astro - Buscando categoría en categoriesData.categories:', category ? 'encontrada' : 'no encontrada');
+    }
+  }
+  
+  if (!category) {
+    errorMessages.push('No se encontró la categoría con el slug proporcionado');
+    console.log('category-slug.astro - No se encontró la categoría con slug:', slug);
   }
 } catch (error) {
-  console.error('Error al obtener datos:', error);
+  console.error('category-slug.astro - Error al obtener datos:', error);
+  errorMessages.push(`Error: ${error.message}`);
 }
 
 // Handle 404 - category not found
@@ -62,6 +95,8 @@ if (!category) {
     name: categoryName,
     slug: slug
   };
+  
+  console.log('category-slug.astro - Usando categoría de fallback:', category);
 }
 
 // Helper function to format dates
@@ -82,6 +117,19 @@ function formatDate(dateString) {
   menuItems={menuItems}
   settings={settings}
 >
+  <div class="debug-panel">
+    <h3>Debug Info - Categoría</h3>
+    <pre>{JSON.stringify({
+      tenant: tenantInfo,
+      categorySlug: slug,
+      categoryName: category?.name,
+      postsCount: posts.length,
+      hasMenu: menuItems.length > 0,
+      hasSettings: Object.keys(settings).length > 0,
+      errors: errorMessages
+    }, null, 2)}</pre>
+  </div>
+
   <div class="category-page">
     <header class="category-header">
       <h1>{category.name}</h1>
@@ -123,12 +171,30 @@ function formatDate(dateString) {
     ) : (
       <div class="no-posts">
         <p>No hay artículos en esta categoría.</p>
+        <p>Se buscaron posts para la categoría: {slug} en el subdomain: {tenantInfo.subdomain}</p>
       </div>
     )}
   </div>
 </BlogLayout>
 
 <style>
+  .debug-panel {
+    background-color: #f8f9fa;
+    border: 1px solid #ddd;
+    padding: 1rem;
+    margin-bottom: 2rem;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.9rem;
+  }
+  
+  .debug-panel pre {
+    background-color: #eee;
+    padding: 0.5rem;
+    overflow: auto;
+    max-height: 200px;
+  }
+  
   .category-page {
     max-width: 1200px;
     margin: 0 auto;

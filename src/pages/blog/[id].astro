@@ -7,23 +7,35 @@ export const prerender = false;
 // Get tenant information from request
 const tenantInfo = getTenantInfo(Astro.request);
 const { id } = Astro.params;
+console.log('id.astro - Parámetros de URL:', { id });
+console.log('id.astro - Tenant info:', tenantInfo);
 
 // Fetch data using tenant information
 let post = null;
 let menuItems = [];
 let settings = {};
+let errorMessages = [];
 
 try {
   // Fetch post, menu, settings in parallel
+  console.log('id.astro - Iniciando fetch de datos para post con ID:', id);
   const [postData, menuData, settingsData] = await Promise.all([
     fetchTenantData(`/posts/public/${id}`, tenantInfo),
     fetchTenantData('/menu/public', tenantInfo),
     fetchTenantData('/settings/public', tenantInfo)
   ]);
   
+  console.log('id.astro - Respuesta del post:', typeof postData);
+  console.log('id.astro - Respuesta del menú:', typeof menuData, Array.isArray(menuData) ? menuData.length : 'no es array');
+  console.log('id.astro - Respuesta de configuración:', typeof settingsData);
+  
   // Process post data
   if (postData) {
     post = postData;
+    console.log('id.astro - Post encontrado:', post.id, post.title);
+  } else {
+    errorMessages.push('No se encontró el post con ese ID');
+    console.log('id.astro - No se encontró el post con ID:', id);
   }
   
   // Process menu data
@@ -33,31 +45,52 @@ try {
       url: item.url,
       active: item.url === `/blog/${id}`
     }));
+    console.log('id.astro - Menú procesado:', menuItems.length);
+  } else {
+    errorMessages.push('No se pudo obtener el menú');
+    console.log('id.astro - No se pudo obtener el menú:', menuData);
   }
   
   // Process settings
   if (settingsData) {
     settings = settingsData;
+    console.log('id.astro - Settings procesados:', Object.keys(settings).join(', '));
+  } else {
+    errorMessages.push('No se pudieron obtener los settings');
+    console.log('id.astro - No se pudieron obtener los settings');
   }
 } catch (error) {
-  console.error('Error al obtener datos:', error);
+  console.error('id.astro - Error al obtener datos:', error);
+  errorMessages.push(`Error: ${error.message}`);
 }
 
-// If post not found by id, try redirecting to slug-based URL
+// If post not found by id, try another approach
 if (!post) {
   try {
-    const response = await fetchTenantData(`/posts/public?id=${id}`, tenantInfo);
-    if (response && Array.isArray(response) && response.length > 0) {
-      const firstPost = response[0];
-      if (firstPost.slug) {
-        return Astro.redirect(`/blog/${firstPost.slug}`);
+    console.log('id.astro - Intentando buscar post con endpoint alternativo (lista filtrada)');
+    const alternatePostData = await fetchTenantData(`/posts/public?id=${id}`, tenantInfo);
+    
+    if (alternatePostData && Array.isArray(alternatePostData) && alternatePostData.length > 0) {
+      post = alternatePostData[0];
+      console.log('id.astro - Post encontrado con endpoint alternativo:', post.id, post.title);
+      
+      // If the post has a slug, redirect to the slug-based URL
+      if (post.slug) {
+        console.log('id.astro - Redirigiendo a URL con slug:', post.slug);
+        return Astro.redirect(`/blog/${post.slug}`);
       }
+    } else {
+      console.log('id.astro - No se encontró post con endpoint alternativo');
     }
   } catch (error) {
-    console.error('Error al buscar post por ID para redirección:', error);
+    console.error('id.astro - Error con endpoint alternativo:', error);
+    errorMessages.push(`Error con endpoint alternativo: ${error.message}`);
   }
-  
-  // If we reach here, no post was found
+}
+
+// If still no post, redirect to 404
+if (!post) {
+  console.log('id.astro - No se encontró post, redirigiendo a 404');
   return Astro.redirect('/404');
 }
 
@@ -73,6 +106,7 @@ function formatDate(dateString) {
 }
 
 const formattedDate = formatDate(post.publishedAt);
+console.log('id.astro - Post procesado correctamente. Renderizando.');
 ---
 
 <BlogLayout 
@@ -81,6 +115,19 @@ const formattedDate = formatDate(post.publishedAt);
   menuItems={menuItems}
   settings={settings}
 >
+  <div class="debug-panel">
+    <h3>Debug Info - Post [id].astro</h3>
+    <pre>{JSON.stringify({
+      tenant: tenantInfo,
+      id,
+      postId: post?.id,
+      postTitle: post?.title,
+      hasMenu: menuItems.length > 0,
+      hasSettings: Object.keys(settings).length > 0,
+      errors: errorMessages
+    }, null, 2)}</pre>
+  </div>
+
   <article class="post">
     <header class="post-header">
       <h1>{post.title}</h1>
@@ -120,6 +167,23 @@ const formattedDate = formatDate(post.publishedAt);
 </BlogLayout>
 
 <style>
+  .debug-panel {
+    background-color: #f8f9fa;
+    border: 1px solid #ddd;
+    padding: 1rem;
+    margin-bottom: 2rem;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.9rem;
+  }
+  
+  .debug-panel pre {
+    background-color: #eee;
+    padding: 0.5rem;
+    overflow: auto;
+    max-height: 200px;
+  }
+
   .post {
     max-width: 800px;
     margin: 0 auto;

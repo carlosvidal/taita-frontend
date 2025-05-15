@@ -7,30 +7,44 @@ export const prerender = false;
 // Get tenant information from request
 const tenantInfo = getTenantInfo(Astro.request);
 const { slug } = Astro.params;
+console.log('slug.astro - Parámetros de URL:', { slug });
+console.log('slug.astro - Tenant info:', tenantInfo);
 
 // Fetch data using tenant information
 let post = null;
 let menuItems = [];
 let settings = {};
 let comments = [];
+let errorMessages = [];
 
 try {
   // Fetch post, menu, settings in parallel
+  console.log('slug.astro - Iniciando fetch de datos para post:', slug);
   const [postData, menuData, settingsData] = await Promise.all([
     fetchTenantData(`/posts/public/slug/${slug}`, tenantInfo),
     fetchTenantData('/menu/public', tenantInfo),
     fetchTenantData('/settings/public', tenantInfo)
   ]);
   
-  console.log('Respuesta del post:', postData);
-  console.log('Respuesta del menú:', menuData);
-  console.log('Respuesta de configuración:', settingsData);
+  console.log('slug.astro - Respuesta del post:', typeof postData, Array.isArray(postData) ? postData.length : 'no es array');
+  console.log('slug.astro - Respuesta del menú:', typeof menuData, Array.isArray(menuData) ? menuData.length : 'no es array');
+  console.log('slug.astro - Respuesta de configuración:', typeof settingsData);
   
   // Process post data - it might come as an array with one item
   if (postData) {
-    post = Array.isArray(postData) && postData.length > 0 
-      ? postData[0] 
-      : postData;
+    if (Array.isArray(postData) && postData.length > 0) {
+      post = postData[0];
+      console.log('slug.astro - Post encontrado en array:', post.id, post.title);
+    } else if (typeof postData === 'object') {
+      post = postData;
+      console.log('slug.astro - Post encontrado como objeto:', post.id, post.title);
+    } else {
+      errorMessages.push('El formato de respuesta del post no es reconocido');
+      console.log('slug.astro - Formato de respuesta no reconocido:', postData);
+    }
+  } else {
+    errorMessages.push('No se encontró el post');
+    console.log('slug.astro - No se encontró el post');
   }
   
   // Process menu data
@@ -40,18 +54,47 @@ try {
       url: item.url,
       active: item.url === `/blog/${slug}`
     }));
+    console.log('slug.astro - Menú procesado:', menuItems.length);
+  } else {
+    errorMessages.push('No se pudo obtener el menú');
+    console.log('slug.astro - No se pudo obtener el menú:', menuData);
   }
   
   // Process settings
   if (settingsData) {
     settings = settingsData;
+    console.log('slug.astro - Settings procesados:', Object.keys(settings).join(', '));
+  } else {
+    errorMessages.push('No se pudieron obtener los settings');
+    console.log('slug.astro - No se pudieron obtener los settings');
   }
 } catch (error) {
-  console.error('Error al obtener datos:', error);
+  console.error('slug.astro - Error al obtener datos:', error);
+  errorMessages.push(`Error: ${error.message}`);
 }
 
 // Handle 404 - post not found
 if (!post) {
+  // Try alternate endpoint format before giving up
+  try {
+    console.log('slug.astro - Intentando buscar post con endpoint alternativo');
+    const alternatePostData = await fetchTenantData(`/posts/public?slug=${slug}`, tenantInfo);
+    
+    if (alternatePostData && Array.isArray(alternatePostData) && alternatePostData.length > 0) {
+      post = alternatePostData[0];
+      console.log('slug.astro - Post encontrado con endpoint alternativo:', post.id, post.title);
+    } else {
+      console.log('slug.astro - No se encontró post con endpoint alternativo');
+    }
+  } catch (error) {
+    console.error('slug.astro - Error con endpoint alternativo:', error);
+    errorMessages.push(`Error con endpoint alternativo: ${error.message}`);
+  }
+}
+
+// If still no post, try redirect
+if (!post) {
+  console.log('slug.astro - Redirigiendo a 404');
   return Astro.redirect('/404');
 }
 
@@ -67,6 +110,7 @@ function formatDate(dateString) {
 }
 
 const formattedDate = formatDate(post.publishedAt);
+console.log('slug.astro - Post procesado correctamente. Renderizando.');
 ---
 
 <BlogLayout 
@@ -75,6 +119,19 @@ const formattedDate = formatDate(post.publishedAt);
   menuItems={menuItems}
   settings={settings}
 >
+  <div class="debug-panel">
+    <h3>Debug Info - Post [slug].astro</h3>
+    <pre>{JSON.stringify({
+      tenant: tenantInfo,
+      slug,
+      postId: post?.id,
+      postTitle: post?.title,
+      hasMenu: menuItems.length > 0,
+      hasSettings: Object.keys(settings).length > 0,
+      errors: errorMessages
+    }, null, 2)}</pre>
+  </div>
+
   <article class="post">
     <header class="post-header">
       <h1>{post.title}</h1>
@@ -114,6 +171,23 @@ const formattedDate = formatDate(post.publishedAt);
 </BlogLayout>
 
 <style>
+  .debug-panel {
+    background-color: #f8f9fa;
+    border: 1px solid #ddd;
+    padding: 1rem;
+    margin-bottom: 2rem;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.9rem;
+  }
+  
+  .debug-panel pre {
+    background-color: #eee;
+    padding: 0.5rem;
+    overflow: auto;
+    max-height: 200px;
+  }
+
   .post {
     max-width: 800px;
     margin: 0 auto;

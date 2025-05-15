@@ -7,6 +7,7 @@ export const prerender = false;
 
 // Obtener información del tenant desde la petición
 const tenantInfo = getTenantInfo(Astro.request);
+console.log('Tenant Info en index.astro:', tenantInfo);
 
 // Definir tipos para mejorar el tipado
 interface Post {
@@ -61,6 +62,8 @@ let settingsData: Settings = {};
 let mappedMenuItems: MenuItemForLayout[] = [];
 
 try {
+  console.log('Iniciando fetch de datos para el tenant:', tenantInfo.subdomain);
+  
   // Fetch posts, menu, settings, and categories in parallel
   const [postsData, menuData, settingsResponse, categoriesData] = await Promise.all([
     fetchTenantData('/posts/public', tenantInfo),
@@ -70,15 +73,18 @@ try {
   ]);
   
   // Debug raw API responses
-  console.log('Tenant Info:', tenantInfo);
-  console.log('Posts:', postsData);
-  console.log('Menu:', menuData);
-  console.log('Settings:', settingsResponse);
-  console.log('Categories:', categoriesData);
+  console.log('index.astro - Posts data type:', typeof postsData, Array.isArray(postsData));
+  console.log('index.astro - Posts count:', Array.isArray(postsData) ? postsData.length : 'no es array');
+  console.log('index.astro - Menu data type:', typeof menuData, Array.isArray(menuData));
+  console.log('index.astro - Settings type:', typeof settingsResponse);
+  console.log('index.astro - Categories type:', typeof categoriesData, Array.isArray(categoriesData));
   
   // Process responses
   if (postsData && Array.isArray(postsData)) {
     posts = postsData;
+    console.log('index.astro - Posts procesados:', posts.length);
+  } else {
+    console.log('index.astro - No se pudieron procesar los posts:', postsData);
   }
   
   if (menuData && Array.isArray(menuData)) {
@@ -89,16 +95,26 @@ try {
       url: item.url || `/${item.slug || ''}`,
       active: item.url === '/' || false
     }));
+    console.log('index.astro - Menú procesado:', mappedMenuItems.length);
+  } else {
+    console.log('index.astro - No se pudo procesar el menú:', menuData);
   }
   
   if (settingsResponse) {
     settingsData = settingsResponse;
+    console.log('index.astro - Settings procesados:', Object.keys(settingsData).join(', '));
+  } else {
+    console.log('index.astro - No se pudieron procesar los settings');
   }
   
   if (categoriesData && Array.isArray(categoriesData)) {
     categories = categoriesData;
+    console.log('index.astro - Categorías procesadas:', categories.length);
   } else if (categoriesData?.categories && Array.isArray(categoriesData.categories)) {
     categories = categoriesData.categories;
+    console.log('index.astro - Categorías procesadas desde categoriesData.categories:', categories.length);
+  } else {
+    console.log('index.astro - No se pudieron procesar las categorías:', categoriesData);
   }
   
 } catch (error) {
@@ -107,6 +123,7 @@ try {
 
 // Add fallback menu items if API fails
 if (mappedMenuItems.length === 0) {
+  console.log('index.astro - Usando menú de fallback');
   mappedMenuItems = [
     { label: 'Inicio', url: '/', active: true },
     { label: 'Blog', url: '/blog', active: false },
@@ -115,6 +132,7 @@ if (mappedMenuItems.length === 0) {
 }
 
 if (categories.length === 0) {
+  console.log('index.astro - Usando categorías de fallback');
   categories = [
     { id: 1, name: 'Tecnología', slug: 'tech' },
     { id: 2, name: 'Diseño', slug: 'design' }
@@ -136,6 +154,13 @@ function formatDate(dateString: string): string {
     return '';
   }
 }
+
+console.log('index.astro - Renderizando con:', {
+  posts: posts.length,
+  menu: mappedMenuItems.length,
+  categorias: categories.length,
+  settings: Object.keys(settingsData).length > 0 ? 'Sí' : 'No'
+});
 ---
 
 <BlogLayout 
@@ -145,6 +170,15 @@ function formatDate(dateString: string): string {
   menuItems={mappedMenuItems}
   settings={settingsData}
 >
+  <div class="debug-panel">
+    <h3>Debug Info - Tenant</h3>
+    <pre>{JSON.stringify(tenantInfo, null, 2)}</pre>
+    <p><strong>Posts encontrados:</strong> {posts.length}</p>
+    <p><strong>Items de menú:</strong> {mappedMenuItems.length}</p>
+    <p><strong>Categorías:</strong> {categories.length}</p>
+    <p><strong>Settings:</strong> {Object.keys(settingsData).join(', ') || 'No settings'}</p>
+  </div>
+
   <div class="content-wrapper">
     {categories.length > 0 && (
       <section class="categories-section">
@@ -204,6 +238,7 @@ function formatDate(dateString: string): string {
       ) : (
         <div class="no-posts">
           <p>No se encontraron posts. Comienza a crear contenido en tu CMS.</p>
+          <p>Se buscaron posts para el subdomain: {tenantInfo.subdomain}</p>
         </div>
       )}
     </div>
@@ -211,6 +246,23 @@ function formatDate(dateString: string): string {
 </BlogLayout>
 
 <style>
+  .debug-panel {
+    background-color: #f8f9fa;
+    border: 1px solid #ddd;
+    padding: 1rem;
+    margin-bottom: 2rem;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.9rem;
+  }
+  
+  .debug-panel pre {
+    background-color: #eee;
+    padding: 0.5rem;
+    overflow: auto;
+    max-height: 200px;
+  }
+  
   .content-wrapper {
     display: grid;
     grid-template-columns: 200px 1fr;
