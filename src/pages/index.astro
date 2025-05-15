@@ -1,7 +1,7 @@
 ---
 import BlogLayout from '../layouts/BlogLayout.astro';
 import { getTenantInfo, fetchTenantData } from '../utils/tenant.js';
-import { getPublicPosts, getPublicMenu, getPublicCategories } from '../utils/direct-api.js';
+import { api } from '../utils/api.js';
 
 // Configuración para renderizado en el servidor
 export const prerender = false;
@@ -55,45 +55,40 @@ interface MenuItemForLayout {
   active: boolean;
 }
 
-// Fetch data using tenant information
+// Variables para almacenar los datos
 let posts: Post[] = [];
 let menuItems: MenuItem[] = [];
 let categories: Category[] = [];
 let settingsData: Settings = {};
 let mappedMenuItems: MenuItemForLayout[] = [];
+let errorMessages: string[] = [];
 
 try {
-  console.log('Iniciando fetch de datos para el tenant:', tenantInfo.subdomain);
+  console.log('index.astro - Iniciando fetch de datos usando API Client');
   
-  // Usar la API directa para obtener los datos
-  console.log('[index.astro] Usando API directa para obtener datos');
-  const subdomain = tenantInfo.subdomain || 'demo';
+  // Configurar cliente API con la información del tenant
+  const apiClient = new api.constructor();
   
-  // Fetch posts, menu, and categories using direct API
-  const [postsData, menuData, categoriesData] = await Promise.all([
-    getPublicPosts(subdomain),
-    getPublicMenu(subdomain),
-    getPublicCategories(subdomain)
-  ]);
-  
-  // Intentar obtener settings con el método original como fallback
-  const settingsResponse = await fetchTenantData('/settings/public', tenantInfo).catch(error => {
-    console.error('[index.astro] Error al obtener settings:', error);
-    return {};
+  // Sobreescribir el método getHostInfo para usar la información del tenant
+  apiClient.getHostInfo = () => ({
+    host: tenantInfo.host,
+    subdomain: tenantInfo.subdomain
   });
   
-  // Debug raw API responses
-  console.log('index.astro - Posts data type:', typeof postsData, Array.isArray(postsData));
-  console.log('index.astro - Posts count:', Array.isArray(postsData) ? postsData.length : 'no es array');
-  console.log('index.astro - Menu data type:', typeof menuData, Array.isArray(menuData));
-  console.log('index.astro - Settings type:', typeof settingsResponse);
-  console.log('index.astro - Categories type:', typeof categoriesData, Array.isArray(categoriesData));
+  // Fetch posts, menu, settings, and categories in parallel
+  const [postsData, menuData, settingsResponse, categoriesData] = await Promise.all([
+    apiClient.fetch('/posts/public'),
+    apiClient.fetch('/menu/public'),
+    apiClient.fetch('/settings/public'),
+    apiClient.fetch('/categories/public')
+  ]);
   
   // Process responses
   if (postsData && Array.isArray(postsData)) {
     posts = postsData;
     console.log('index.astro - Posts procesados:', posts.length);
   } else {
+    errorMessages.push('No se pudieron obtener los posts');
     console.log('index.astro - No se pudieron procesar los posts:', postsData);
   }
   
@@ -107,6 +102,7 @@ try {
     }));
     console.log('index.astro - Menú procesado:', mappedMenuItems.length);
   } else {
+    errorMessages.push('No se pudo obtener el menú');
     console.log('index.astro - No se pudo procesar el menú:', menuData);
   }
   
@@ -114,6 +110,7 @@ try {
     settingsData = settingsResponse;
     console.log('index.astro - Settings procesados:', Object.keys(settingsData).join(', '));
   } else {
+    errorMessages.push('No se pudieron obtener los settings');
     console.log('index.astro - No se pudieron procesar los settings');
   }
   
@@ -124,11 +121,61 @@ try {
     categories = categoriesData.categories;
     console.log('index.astro - Categorías procesadas desde categoriesData.categories:', categories.length);
   } else {
+    errorMessages.push('No se pudieron obtener las categorías');
     console.log('index.astro - No se pudieron procesar las categorías:', categoriesData);
   }
   
 } catch (error) {
   console.error('API Error:', error);
+  errorMessages.push(`Error: ${error.message}`);
+  
+  // Try with legacy method if new method fails
+  try {
+    console.log('index.astro - Intentando con método legacy');
+    
+    const [postsData, menuData, settingsResponse, categoriesData] = await Promise.all([
+      fetchTenantData('/posts/public', tenantInfo),
+      fetchTenantData('/menu/public', tenantInfo),
+      fetchTenantData('/settings/public', tenantInfo),
+      fetchTenantData('/categories/public', tenantInfo)
+    ]);
+    
+    // Process posts
+    if (postsData && Array.isArray(postsData)) {
+      posts = postsData;
+      console.log('index.astro - Posts procesados (legacy):', posts.length);
+    }
+    
+    // Process menu
+    if (menuData && Array.isArray(menuData)) {
+      menuItems = menuData;
+      mappedMenuItems = menuItems.map((item): MenuItemForLayout => ({
+        label: item.label || item.title || item.name || 'Link',
+        url: item.url || `/${item.slug || ''}`,
+        active: item.url === '/' || false
+      }));
+      console.log('index.astro - Menú procesado (legacy):', mappedMenuItems.length);
+    }
+    
+    // Process settings
+    if (settingsResponse) {
+      settingsData = settingsResponse;
+      console.log('index.astro - Settings procesados (legacy):', Object.keys(settingsData).join(', '));
+    }
+    
+    // Process categories
+    if (categoriesData && Array.isArray(categoriesData)) {
+      categories = categoriesData;
+      console.log('index.astro - Categorías procesadas (legacy):', categories.length);
+    } else if (categoriesData?.categories && Array.isArray(categoriesData.categories)) {
+      categories = categoriesData.categories;
+      console.log('index.astro - Categorías procesadas desde categoriesData.categories (legacy):', categories.length);
+    }
+    
+  } catch (legacyError) {
+    console.error('Legacy API Error:', legacyError);
+    errorMessages.push(`Legacy Error: ${legacyError.message}`);
+  }
 }
 
 // Add fallback menu items if API fails
@@ -169,7 +216,8 @@ console.log('index.astro - Renderizando con:', {
   posts: posts.length,
   menu: mappedMenuItems.length,
   categorias: categories.length,
-  settings: Object.keys(settingsData).length > 0 ? 'Sí' : 'No'
+  settings: Object.keys(settingsData).length > 0 ? 'Sí' : 'No',
+  errores: errorMessages.length
 });
 ---
 
@@ -187,6 +235,15 @@ console.log('index.astro - Renderizando con:', {
     <p><strong>Items de menú:</strong> {mappedMenuItems.length}</p>
     <p><strong>Categorías:</strong> {categories.length}</p>
     <p><strong>Settings:</strong> {Object.keys(settingsData).join(', ') || 'No settings'}</p>
+    {errorMessages.length > 0 && (
+      <div class="errors">
+        <h4>Errores:</h4>
+        <ul>
+          {errorMessages.map(err => <li>{err}</li>)}
+        </ul>
+        <p><a href="/api-test" target="_blank">Ir a página de diagnóstico</a></p>
+      </div>
+    )}
   </div>
 
   <div class="content-wrapper">
@@ -213,9 +270,9 @@ console.log('index.astro - Renderizando con:', {
                   <a href={`/blog/${post.slug || post.id}`}>{post.title}</a>
                 </h2>
                 <div class="post-meta">
-                  {post.publishedAt && (
-                    <time datetime={post.publishedAt}>
-                      {formatDate(post.publishedAt)}
+                  {(post.publishedAt || post.createdAt) && (
+                    <time datetime={post.publishedAt || post.createdAt}>
+                      {formatDate(post.publishedAt || post.createdAt)}
                     </time>
                   )}
                   
@@ -232,7 +289,11 @@ console.log('index.astro - Renderizando con:', {
               {post.image && (
                 <div class="post-image">
                   <a href={`/blog/${post.slug || post.id}`}>
-                    <img src={`${import.meta.env.PUBLIC_IMAGE_BASE_URL}/${post.image}`} alt={post.title} loading="lazy" />
+                    <img 
+                      src={post.image.startsWith('http') ? post.image : `${import.meta.env.PUBLIC_IMAGE_BASE_URL || ''}/${post.image}`} 
+                      alt={post.title} 
+                      loading="lazy" 
+                    />
                   </a>
                 </div>
               )}
@@ -249,6 +310,7 @@ console.log('index.astro - Renderizando con:', {
         <div class="no-posts">
           <p>No se encontraron posts. Comienza a crear contenido en tu CMS.</p>
           <p>Se buscaron posts para el subdomain: {tenantInfo.subdomain}</p>
+          <a href="/api-test" class="diagnose-link">Ejecutar diagnóstico</a>
         </div>
       )}
     </div>
@@ -271,6 +333,16 @@ console.log('index.astro - Renderizando con:', {
     padding: 0.5rem;
     overflow: auto;
     max-height: 200px;
+  }
+  
+  .debug-panel .errors {
+    margin-top: 1rem;
+    color: #d00;
+  }
+  
+  .debug-panel a {
+    color: #0066cc;
+    text-decoration: underline;
   }
   
   .content-wrapper {
@@ -396,6 +468,21 @@ console.log('index.astro - Renderizando con:', {
     padding: 3rem;
     text-align: center;
     border-radius: 8px;
+  }
+  
+  .diagnose-link {
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 0.5rem 1rem;
+    background-color: #0066cc;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+  }
+  
+  .diagnose-link:hover {
+    background-color: #004c99;
   }
 
   @media (max-width: 768px) {
