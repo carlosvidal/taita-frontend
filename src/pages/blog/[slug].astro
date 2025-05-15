@@ -1,0 +1,292 @@
+---
+import BlogLayout from '../../layouts/BlogLayout.astro';
+
+// Configuración para renderizado en el servidor
+
+// Definir la interfaz para el tipo Post
+interface Post {
+  id: number;
+  title: string;
+  content: string;
+  excerpt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  publishedAt: string;
+  image?: string;
+  slug: string;
+  category?: {
+    id: number;
+    name: string;
+    slug: string;
+  };
+  author?: {
+    id: number;
+    name: string;
+    email?: string;
+    bio?: string;
+    avatar?: string;
+  };
+}
+
+interface MenuItem {
+  id: number;
+  label: string;
+  url: string;
+  order: number;
+}
+
+interface MenuItemForLayout {
+  label: string;
+  url: string;
+  active: boolean;
+}
+
+interface Settings {
+  title: string;
+  description: string;
+}
+
+export const prerender = false;
+
+// Generar rutas estáticas para cada post
+export function getStaticPaths() {
+  // Usar datos estáticos de fallback para evitar problemas de conexión con la API durante el build
+  // Esto garantiza que el sitio se pueda construir sin depender de la API
+  const fallbackPosts: Post[] = [
+    { 
+      id: 1, 
+      title: 'Primer post de ejemplo', 
+      content: 'Este es el contenido del primer post de ejemplo.', 
+      publishedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      slug: 'primer-post-de-ejemplo',
+      category: { id: 1, name: 'General', slug: 'general' },
+      author: { id: 1, name: 'Admin' },
+      image: 'https://via.placeholder.com/800x400'
+    },
+    { 
+      id: 2, 
+      title: 'Segundo post', 
+      content: 'Contenido del segundo post.', 
+      publishedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      slug: 'segundo-post',
+      category: { id: 2, name: 'Tecnología', slug: 'tecnologia' },
+      author: { id: 1, name: 'Admin' },
+      image: 'https://via.placeholder.com/800x400'
+    }
+  ];
+  
+  return fallbackPosts.map((post) => ({
+    params: { slug: post.slug },
+    props: { post }
+  }));
+}
+
+// Datos de fallback para el build
+const fallbackMenuData: MenuItem[] = [
+  { id: 1, label: 'Home', url: '/', order: 1 },
+  { id: 2, label: 'Blog', url: '/blog', order: 2 },
+  { id: 3, label: 'Categories', url: '/categories', order: 3 },
+  { id: 4, label: 'About', url: '/about', order: 4 }
+];
+
+const fallbackSettingsData: Settings = {
+  title: 'Taita Blog',
+  description: 'A simple blog built with Astro'
+};
+
+// Obtener el post desde la API usando el slug
+const { slug } = Astro.params;
+let post;
+
+try {
+  // Obtener el host para determinar el blog
+  const host = Astro.request.headers.get('host') || '';
+  
+  // Obtener el post desde la API
+  const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000';
+  const response = await fetch(`${apiUrl}/api/posts/public/slug/${slug}`, {
+    headers: {
+      'Host': host
+    }
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Error al obtener el post: ${response.status}`);
+  }
+  
+  const posts = await response.json();
+  
+  // Verificar si se encontró un post
+  if (posts && posts.length > 0) {
+    post = posts[0];
+  } else {
+    // Si no se encuentra el post, usar los datos de fallback
+    post = Astro.props.post;
+  }
+} catch (error) {
+  console.error('Error al obtener el post:', error);
+  // Usar los datos de fallback en caso de error
+  post = Astro.props.post;
+}
+
+// Obtener menú y configuración desde la API
+let menuData = fallbackMenuData;
+let settingsData = fallbackSettingsData;
+
+try {
+  const host = Astro.request.headers.get('host') || '';
+  const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:3000';
+  
+  // Obtener menú
+  const menuResponse = await fetch(`${apiUrl}/api/menu/public`, {
+    headers: {
+      'Host': host
+    }
+  });
+  
+  if (menuResponse.ok) {
+    menuData = await menuResponse.json();
+  }
+  
+  // Obtener configuración
+  const settingsResponse = await fetch(`${apiUrl}/api/settings/public`, {
+    headers: {
+      'Host': host
+    }
+  });
+  
+  if (settingsResponse.ok) {
+    settingsData = await settingsResponse.json();
+  }
+} catch (error) {
+  console.error('Error al obtener datos de la API:', error);
+}
+
+// Procesar elementos del menú para el layout
+const mappedMenuItems: MenuItemForLayout[] = menuData.map((item) => ({
+  label: item.label,
+  url: item.url,
+  active: item.url === `/blog/${slug}`
+}));
+
+// Función para formatear fechas
+function formatDate(dateString: string | undefined): string {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  return date.toLocaleDateString('es-ES', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+}
+
+const formattedDate = formatDate(post.publishedAt);
+---
+
+<BlogLayout title={post.title} menuItems={mappedMenuItems} settings={settingsData}>
+  <article class="post-content">
+    <header>
+      <h1>{post.title}</h1>
+      <div class="post-meta">
+        <time datetime={post.publishedAt}>{formattedDate}</time>
+        {post.category && (
+          <span class="category">
+            <a href={`/category/${post.category.slug}`}>{post.category.name}</a>
+          </span>
+        )}
+      </div>
+    </header>
+    
+    {post.image && (
+      <div class="featured-image">
+        <img src={post.image} alt={post.title} />
+      </div>
+    )}
+    
+    <div class="content">
+      {post.content}
+    </div>
+    
+    {post.author && (
+      <div class="author-bio">
+        <h3>Sobre el autor</h3>
+        <div class="author-info">
+          {post.author.avatar && (
+            <img src={post.author.avatar} alt={post.author.name} class="author-avatar" />
+          )}
+          <div>
+            <h4>{post.author.name}</h4>
+            {post.author.bio && <p>{post.author.bio}</p>}
+          </div>
+        </div>
+      </div>
+    )}
+  </article>
+</BlogLayout>
+
+<style>
+  .post-content {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+  }
+  
+  h1 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+  }
+  
+  .post-meta {
+    display: flex;
+    gap: 1rem;
+    color: #666;
+    margin-bottom: 2rem;
+    font-size: 0.9rem;
+  }
+  
+  .category a {
+    color: #0066cc;
+    text-decoration: none;
+  }
+  
+  .category a:hover {
+    text-decoration: underline;
+  }
+  
+  .featured-image {
+    margin: 0 -1rem 2rem;
+    overflow: hidden;
+  }
+  
+  .featured-image img {
+    width: 100%;
+    height: auto;
+    object-fit: cover;
+  }
+  
+  .content {
+    line-height: 1.6;
+    color: #333;
+  }
+  
+  .author-bio {
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid #eee;
+  }
+  
+  .author-info {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  }
+  
+  .author-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+</style>
