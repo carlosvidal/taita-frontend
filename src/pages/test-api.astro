@@ -1,0 +1,252 @@
+---
+// Página simple para probar la API con el subdominio demo
+import Layout from '../layouts/Layout.astro';
+
+export const prerender = false;
+
+// Función para hacer una petición directa a la API
+async function fetchFromApi(endpoint, subdomain) {
+  const apiUrl = import.meta.env.PUBLIC_API_URL || 'https://taita-api.onrender.com/api';
+  const url = `${apiUrl}${endpoint}`;
+  
+  console.log(`[Test API] Petición directa a ${url} con subdominio ${subdomain}`);
+  
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Taita-Subdomain': subdomain,
+        'Origin': 'https://taita.blog',
+        'Referer': 'https://taita.blog/',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'
+      }
+    });
+    
+    console.log(`[Test API] Status: ${response.status} ${response.statusText}`);
+    
+    if (!response.ok) {
+      throw new Error(`Error de API: ${response.status} ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error(`[Test API] Error:`, error);
+    return { error: error.message };
+  }
+}
+
+// Función para hacer una petición a través del proxy
+async function fetchFromProxy(endpoint, subdomain) {
+  const url = `/api/proxy?endpoint=${encodeURIComponent(endpoint)}&subdomain=${encodeURIComponent(subdomain)}`;
+  
+  console.log(`[Test API] Petición a proxy: ${url}`);
+  
+  try {
+    const response = await fetch(url);
+    
+    console.log(`[Test API] Status del proxy: ${response.status} ${response.statusText}`);
+    
+    if (!response.ok) {
+      throw new Error(`Error de proxy: ${response.status} ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error(`[Test API] Error en proxy:`, error);
+    return { error: error.message };
+  }
+}
+
+// Hacer peticiones con diferentes métodos
+const directApiResult = await fetchFromApi('/posts/public', 'demo');
+const proxyResult = await fetchFromProxy('/posts/public', 'demo');
+
+// También probar con POST al proxy
+let postProxyResult;
+try {
+  const response = await fetch('/api/proxy', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      endpoint: '/posts/public',
+      subdomain: 'demo'
+    })
+  });
+  
+  postProxyResult = await response.json();
+} catch (error) {
+  postProxyResult = { error: error.message };
+}
+
+// Información del host
+const host = Astro.request.headers.get('host') || '';
+let subdomain = '';
+
+if (host.includes('.') && !host.startsWith('www.')) {
+  subdomain = host.split('.')[0];
+} else if (host.includes('localhost')) {
+  subdomain = 'demo'; // Valor por defecto para desarrollo local
+}
+
+const hostInfo = { host, subdomain };
+---
+
+<Layout title="Prueba de API">
+  <main>
+    <h1>Prueba de API con subdominio "demo"</h1>
+    
+    <div class="section">
+      <h2>Información del Host</h2>
+      <pre>{JSON.stringify(hostInfo, null, 2)}</pre>
+    </div>
+    
+    <div class="section">
+      <h2>Resultado de API Directa</h2>
+      <pre>{JSON.stringify(directApiResult, null, 2)}</pre>
+    </div>
+    
+    <div class="section">
+      <h2>Resultado de Proxy GET</h2>
+      <pre>{JSON.stringify(proxyResult, null, 2)}</pre>
+    </div>
+    
+    <div class="section">
+      <h2>Resultado de Proxy POST</h2>
+      <pre>{JSON.stringify(postProxyResult, null, 2)}</pre>
+    </div>
+    
+    <div class="section">
+      <h2>Prueba en vivo</h2>
+      <button id="btn-direct">Probar API Directa</button>
+      <button id="btn-proxy-get">Probar Proxy GET</button>
+      <button id="btn-proxy-post">Probar Proxy POST</button>
+      <div id="live-result"></div>
+    </div>
+  </main>
+</Layout>
+
+<style>
+  main {
+    margin: 0 auto;
+    max-width: 1200px;
+    padding: 2rem;
+  }
+  
+  .section {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    border-radius: 8px;
+    background-color: #f9f9f9;
+  }
+  
+  pre {
+    background-color: #f0f0f0;
+    padding: 1rem;
+    border-radius: 4px;
+    overflow: auto;
+    font-size: 0.9rem;
+  }
+  
+  button {
+    background-color: #0066cc;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  
+  button:hover {
+    background-color: #0055aa;
+  }
+  
+  #live-result {
+    margin-top: 1rem;
+    padding: 1rem;
+    background-color: #f0f0f0;
+    border-radius: 4px;
+    min-height: 200px;
+  }
+</style>
+
+<script>
+  // Función para mostrar resultados
+  function showResult(data) {
+    const resultElement = document.getElementById('live-result');
+    resultElement.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+  }
+  
+  // Probar API directa
+  document.getElementById('btn-direct').addEventListener('click', async () => {
+    try {
+      const apiUrl = 'https://taita-api.onrender.com/api';
+      const response = await fetch(`${apiUrl}/posts/public`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Taita-Subdomain': 'demo',
+          'Origin': 'https://taita.blog',
+          'Referer': 'https://taita.blog/',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      showResult(data);
+    } catch (error) {
+      showResult({ error: error.message });
+    }
+  });
+  
+  // Probar proxy GET
+  document.getElementById('btn-proxy-get').addEventListener('click', async () => {
+    try {
+      const response = await fetch(`/api/proxy?endpoint=/posts/public&subdomain=demo`);
+      
+      if (!response.ok) {
+        throw new Error(`Error: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      showResult(data);
+    } catch (error) {
+      showResult({ error: error.message });
+    }
+  });
+  
+  // Probar proxy POST
+  document.getElementById('btn-proxy-post').addEventListener('click', async () => {
+    try {
+      const response = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          endpoint: '/posts/public',
+          subdomain: 'demo'
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      showResult(data);
+    } catch (error) {
+      showResult({ error: error.message });
+    }
+  });
+</script>
