@@ -66,11 +66,10 @@ export class ApiClient {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Host': host,
-        'X-Taita-Subdomain': subdomain,
-        'Origin': 'https://taita.blog',
-        'Referer': 'https://taita.blog/',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36',
+        // Quitar el header Host que causa problemas con Cloudflare
+        // 'Host': host,
+        'X-Taita-Subdomain': subdomain, // Este header es el que ahora se utiliza en la API
+        // Simplificar headers adicionales para evitar problemas
         ...options.headers
       }
     };

@@ -43,17 +43,15 @@ export async function GET({ request, url }) {
     console.log(`[Proxy GET] Petición a ${fullUrl}`);
     console.log(`[Proxy GET] Host: ${host}, Subdominio: ${subdomain}`);
     
-    // Construir opciones de fetch
+    // Construir opciones de fetch para GET
     const options = {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Host': host,
-        'X-Taita-Subdomain': subdomain,
-        'Origin': 'https://taita.blog',
-        'Referer': 'https://taita.blog/',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'
+        // Quitar el header Host que causa problemas
+        // 'Host': host,
+        'X-Taita-Subdomain': subdomain
       }
     };
     
@@ -127,17 +125,14 @@ export async function POST({ request }) {
     if (endpoint === '/posts/public' || endpoint.includes('/posts/public')) {
       console.log(`[Proxy DEBUG] Petición especial a /posts/public`);
       
-      // Forzar subdomain a "demo" para pruebas
+      // Construir opciones de fetch para debug
       const debugOptions = {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'Host': 'demo.taita.blog',
-          'X-Taita-Subdomain': 'demo',
-          'Origin': 'https://taita.blog',
-          'Referer': 'https://taita.blog/',
-          'User-Agent': 'TaitaDebugger/1.0'
+          // Quitar el header Host problemático
+          'X-Taita-Subdomain': 'demo'
         }
       };
       
@@ -161,17 +156,14 @@ export async function POST({ request }) {
     console.log(`[Proxy] Petición regular a ${url}`);
     console.log(`[Proxy] Opciones regulares:`, JSON.stringify(options, null, 2));
     
-    // Construir opciones de fetch
+    // Construir opciones de fetch para POST
     const options = {
       method,
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Host': host,
-        'X-Taita-Subdomain': subdomain || 'demo',
-        'Origin': 'https://taita.blog',
-        'Referer': 'https://taita.blog/',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'
+        // Quitar el header Host problemático
+        'X-Taita-Subdomain': subdomain || 'demo'
       }
     };
     
