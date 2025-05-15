@@ -45,10 +45,20 @@ export class ApiClient {
   async fetch(endpoint, options = {}) {
     // Asegurarse de que el endpoint empieza con /
     const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-    const url = `${this.baseUrl}${path}`;
     
     // Obtener información del host
     const { host, subdomain } = this.getHostInfo();
+    
+    // Verificar si el endpoint ya tiene parámetros de consulta
+    let finalUrl = `${this.baseUrl}${path}`;
+    const hasQueryParams = finalUrl.includes('?');
+    
+    // Añadir el subdominio como parámetro de consulta si no está presente en la URL
+    if (!finalUrl.includes('subdomain=') && subdomain) {
+      finalUrl = finalUrl + (hasQueryParams ? '&' : '?') + `subdomain=${encodeURIComponent(subdomain)}`;
+    }
+    
+    console.log(`[ApiClient] URL final: ${finalUrl}`);
     
     // Configurar opciones
     const fetchOptions = {
@@ -74,12 +84,12 @@ export class ApiClient {
     
     try {
       // Primera estrategia: Petición directa a la API
-      console.log(`[ApiClient] Intentando petición directa a ${url}`);
-      const response = await fetch(url, fetchOptions);
+      console.log(`[ApiClient] Intentando petición directa a ${finalUrl}`);
+      const response = await fetch(finalUrl, fetchOptions);
       
       // Si la respuesta es exitosa, devolver los datos
       if (response.ok) {
-        console.log(`[ApiClient] Petición directa exitosa a ${url}`);
+        console.log(`[ApiClient] Petición directa exitosa a ${finalUrl}`);
         const contentType = response.headers.get('content-type');
         
         if (contentType && contentType.includes('application/json')) {
@@ -95,7 +105,7 @@ export class ApiClient {
       // Segunda estrategia: Usar el proxy local
       return await this.fetchViaProxy(endpoint, options);
     } catch (error) {
-      console.error(`[ApiClient] Error en petición a ${url}:`, error);
+      console.error(`[ApiClient] Error en petición a ${finalUrl}:`, error);
       
       // Si hay un error en la petición directa, intentar con el proxy
       console.log(`[ApiClient] Intentando recuperación mediante proxy`);
@@ -113,24 +123,38 @@ export class ApiClient {
     // Asegurarse de que el endpoint empieza con /
     const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     
+    // Extraer parámetros de consulta si existen en la URL
+    let queryParams = {};
+    if (path.includes('?')) {
+      const [basePath, queryString] = path.split('?');
+      const searchParams = new URLSearchParams(queryString);
+      searchParams.forEach((value, key) => {
+        queryParams[key] = value;
+      });
+    }
+    
     // Obtener información del host
     const { host, subdomain } = this.getHostInfo();
     
     try {
       console.log(`[ApiClient] Realizando petición mediante proxy a ${path}`);
       
-      // Extraer parámetros de consulta si existen en la URL
-      let queryParams = {};
-      if (path.includes('?')) {
-        const [basePath, queryString] = path.split('?');
-        const searchParams = new URLSearchParams(queryString);
-        searchParams.forEach((value, key) => {
-          queryParams[key] = value;
-        });
+      // Construir URL absoluta para el proxy
+      let proxyUrl;
+      if (typeof window !== 'undefined') {
+        // En el navegador, usar la URL actual
+        const baseUrl = window.location.origin;
+        proxyUrl = `${baseUrl}/api/proxy`;
+      } else {
+        // En el servidor, construir URL basada en el host
+        const protocol = host.includes('localhost') ? 'http' : 'https';
+        proxyUrl = `${protocol}://${host}/api/proxy`;
       }
       
+      console.log(`[ApiClient] URL del proxy: ${proxyUrl}`);
+      
       // Petición al proxy local
-      const response = await fetch('/api/proxy', {
+      const response = await fetch(proxyUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -1,6 +1,7 @@
 ---
 import BlogLayout from '../layouts/BlogLayout.astro';
 import { getTenantInfo, fetchTenantData } from '../utils/tenant.js';
+import { getPublicPosts, getPublicMenu, getPublicCategories } from '../utils/direct-api.js';
 
 // Configuración para renderizado en el servidor
 export const prerender = false;
@@ -64,13 +65,22 @@ let mappedMenuItems: MenuItemForLayout[] = [];
 try {
   console.log('Iniciando fetch de datos para el tenant:', tenantInfo.subdomain);
   
-  // Fetch posts, menu, settings, and categories in parallel
-  const [postsData, menuData, settingsResponse, categoriesData] = await Promise.all([
-    fetchTenantData('/posts/public', tenantInfo),
-    fetchTenantData('/menu/public', tenantInfo),
-    fetchTenantData('/settings/public', tenantInfo),
-    fetchTenantData('/categories/public', tenantInfo)
+  // Usar la API directa para obtener los datos
+  console.log('[index.astro] Usando API directa para obtener datos');
+  const subdomain = tenantInfo.subdomain || 'demo';
+  
+  // Fetch posts, menu, and categories using direct API
+  const [postsData, menuData, categoriesData] = await Promise.all([
+    getPublicPosts(subdomain),
+    getPublicMenu(subdomain),
+    getPublicCategories(subdomain)
   ]);
+  
+  // Intentar obtener settings con el método original como fallback
+  const settingsResponse = await fetchTenantData('/settings/public', tenantInfo).catch(error => {
+    console.error('[index.astro] Error al obtener settings:', error);
+    return {};
+  });
   
   // Debug raw API responses
   console.log('index.astro - Posts data type:', typeof postsData, Array.isArray(postsData));
