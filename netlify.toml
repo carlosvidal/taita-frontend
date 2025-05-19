@@ -4,14 +4,24 @@
 
 [build.environment]
   NODE_VERSION = "18"
-  API_URL = "https://api.taita.blog"
+  NPM_VERSION = "9.8.1"
+  PUBLIC_API_URL = "https://taita-api.onrender.com/api"
   SITE_NAME = "Taita Blog"
   TENANT_DOMAIN = "taita.blog"
 
+# Manejo de rutas para SPA
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+  force = false
+
+# Manejo de rutas de API
+[[redirects]]
+  from = "/api/*"
+  to = "https://taita-api.onrender.com/api/:splat"
+  status = 200
+  force = true
 
 [[headers]]
   for = "/*"
