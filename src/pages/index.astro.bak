@@ -264,75 +264,46 @@ console.log('index.astro - Renderizando con:', {
       {posts.length > 0 ? (
         <div>
           {posts.map(post => (
-            <div style="background: #f0f8ff; padding: 15px; margin: 10px 0; border: 1px solid #d0e3ff; border-radius: 4px;">
-              <h3 style="margin-top: 0;">
-                <a href={`/blog/${post.slug || post.id}`} style="color: #0066cc; text-decoration: none;">
-                  {post.title || 'Sin título'}
-                </a>
-              </h3>
-              
-              <div style="color: #666; font-size: 0.9em; margin-bottom: 10px;">
-                {post.publishedAt || post.createdAt ? (
-                  <span style="margin-right: 15px;">
-                    📅 {formatDate(post.publishedAt || post.createdAt)}
-                  </span>
-                ) : null}
-                
-                {post.category ? (
-                  <span>
-                    📁 <a 
-                        href={`/category/${post.category.slug}`}
-                        style="color: #0066cc; text-decoration: none;"
-                      >
+            <article class="post">
+              <header class="post-header">
+                <h2 class="post-title">
+                  <a href={`/blog/${post.slug || post.id}`}>{post.title}</a>
+                </h2>
+                <div class="post-meta">
+                  {(post.publishedAt || post.createdAt) && (
+                    <time datetime={post.publishedAt || post.createdAt}>
+                      {formatDate(post.publishedAt || post.createdAt)}
+                    </time>
+                  )}
+                  
+                  {post.category && (
+                    <span class="post-categories">
+                      <a href={`/category/${post.category.slug}`}>
                         {post.category.name}
                       </a>
-                  </span>
-                ) : null}
-              </div>
-              
-              {post.excerpt && (
-                <div style="margin: 10px 0; color: #333;">
-                  {post.excerpt}
+                    </span>
+                  )}
                 </div>
-              )}
+              </header>
               
               {post.image && (
-                <div style="margin: 15px 0;">
+                <div class="post-image">
                   <a href={`/blog/${post.slug || post.id}`}>
                     <img 
                       src={post.image.startsWith('http') ? post.image : `${import.meta.env.PUBLIC_IMAGE_BASE_URL || ''}/${post.image}`} 
                       alt={post.title} 
-                      loading="lazy"
-                      style="max-width: 100%; height: auto; border-radius: 4px;"
+                      loading="lazy" 
                     />
                   </a>
                 </div>
               )}
               
-              <div style="margin-top: 10px;">
-                <a 
-                  href={`/blog/${post.slug || post.id}`}
-                  style="
-                    display: inline-block;
-                    background: #0066cc;
-                    color: white;
-                    padding: 5px 12px;
-                    border-radius: 4px;
-                    text-decoration: none;
-                    font-size: 0.9em;
-                  "
-                >
-                  Leer más →
-                </a>
+              <div class="post-excerpt">
+                {post.excerpt || post.content.substring(0, 250) + '...'}
               </div>
               
-              {/* Sección de depuración */}
-              <div style="margin-top: 15px; padding-top: 10px; border-top: 1px dashed #ccc; font-size: 0.8em; color: #666;">
-                <div><strong>ID:</strong> {post.id}</div>
-                <div><strong>Slug:</strong> {post.slug || 'No definido'}</div>
-                <div><strong>Categoría:</strong> {post.category ? post.category.name : 'Ninguna'}</div>
-              </div>
-            </div>
+              <a href={`/blog/${post.slug || post.id}`} class="read-more">Seguir leyendo →</a>
+            </article>
           ))}
         </div>
       ) : (
