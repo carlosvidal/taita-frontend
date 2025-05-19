@@ -7,10 +7,16 @@ import { api } from '../utils/api.js';
 export const prerender = false;
 
 // Obtener información del tenant desde la petición
-const tenantInfo = getTenantInfo(Astro.request);
+const tenantInfo: TenantInfo = getTenantInfo(Astro.request) || {};
 console.log('Tenant Info en index.astro:', tenantInfo);
 
 // Definir tipos para mejorar el tipado
+interface TenantInfo {
+  host?: string;
+  subdomain?: string;
+  [key: string]: any;
+}
+
 interface Post {
   id: number;
   title: string;
@@ -29,12 +35,13 @@ interface Post {
 }
 
 interface MenuItem {
-  id?: number;
-  uuid?: string;
-  label?: string;
-  url?: string;
-  order?: number;
-  parentId?: number | null;
+  id: number;
+  uuid: string;
+  label: string;
+  url: string;
+  order: number;
+  parentId: number | null;
+  children: MenuItem[];
 }
 
 interface Category {
@@ -44,90 +51,136 @@ interface Category {
 }
 
 interface Settings {
-  title?: string;
-  description?: string;
+  title: string;
+  description: string;
   blogTitle?: string;
+  [key: string]: any; // Para propiedades adicionales
 }
 
 interface MenuItemForLayout {
   label: string;
   url: string;
   active: boolean;
+  children?: MenuItemForLayout[];
 }
 
 // Variables para almacenar los datos
 let posts: Post[] = [];
 let menuItems: MenuItem[] = [];
 let categories: Category[] = [];
-let settingsData: Settings = {};
+let settingsData: Settings = {
+  title: 'Taita Blog',
+  description: 'Un blog moderno construido con Astro',
+  blogTitle: 'Taita'
+};
 let mappedMenuItems: MenuItemForLayout[] = [];
 let errorMessages: string[] = [];
 
 try {
   console.log('index.astro - Iniciando fetch de datos usando API Client');
   
-  // Configurar cliente API con la información del tenant
-  const apiClient = new api.constructor();
+  // Usar la instancia de API ya configurada
+  const apiClient = api;
   
-  // Sobreescribir el método getHostInfo para usar la información del tenant
-  apiClient.getHostInfo = () => ({
-    host: tenantInfo.host,
-    subdomain: tenantInfo.subdomain
-  });
+  // Obtener el host y subdominio
+  const host = tenantInfo.host || 'taita.blog';
+  const subdomain = tenantInfo.subdomain || 'demo';
   
-  // Fetch posts, menu, settings, and categories in parallel
-  const [postsData, menuData, settingsResponse, categoriesData] = await Promise.all([
-    apiClient.fetch('/posts/public'),
-    apiClient.fetch('/menu/public'),
-    apiClient.fetch('/settings/public'),
-    apiClient.fetch('/categories/public')
-  ]);
+  console.log('Obteniendo datos para:', { host, subdomain });
   
-  // Process responses
-  if (postsData && Array.isArray(postsData)) {
-    posts = postsData;
-    console.log('index.astro - Posts procesados:', posts.length);
-  } else {
-    errorMessages.push('No se pudieron obtener los posts');
-    console.log('index.astro - No se pudieron procesar los posts:', postsData);
-  }
-  
-  if (menuData && Array.isArray(menuData)) {
-    menuItems = menuData;
+  // Hacer las peticiones en paralelo como en api-test.astro
+  try {
+    const [postsData, menuData, settingsResponse, categoriesData] = await Promise.all([
+      apiClient.fetch('/posts/public', {
+        headers: {
+          'Host': host,
+          'X-Taita-Subdomain': subdomain,
+          'Origin': 'https://taita.blog',
+          'Referer': 'https://taita.blog/'
+        }
+      }),
+      apiClient.fetch('/menu/public', {
+        headers: {
+          'Host': host,
+          'X-Taita-Subdomain': subdomain
+        }
+      }),
+      apiClient.fetch('/settings/public', {
+        headers: {
+          'Host': host,
+          'X-Taita-Subdomain': subdomain
+        }
+      }),
+      apiClient.fetch('/categories/public', {
+        headers: {
+          'Host': host,
+          'X-Taita-Subdomain': subdomain
+        }
+      })
+    ]);
+    
+    // Procesar respuestas
+    if (postsData && Array.isArray(postsData)) {
+      posts = postsData;
+      console.log('Posts cargados:', posts.length);
+    } else {
+      console.error('Formato de posts inesperado:', postsData);
+      errorMessages.push('No se pudieron obtener los posts');
+    }
+    
+    if (menuData && Array.isArray(menuData)) {
+      menuItems = menuData;
+      console.log('Menú cargado:', menuItems.length, 'elementos');
+    } else {
+      console.error('Formato de menú inesperado:', menuData);
+      errorMessages.push('No se pudo cargar el menú');
+    }
+    
+    if (settingsResponse) {
+      settingsData = settingsResponse;
+      console.log('Settings cargados:', Object.keys(settingsData).join(', '));
+    } else {
+      console.error('No se recibieron settings');
+      errorMessages.push('No se pudieron cargar los ajustes');
+    }
+    
+    if (categoriesData && Array.isArray(categoriesData)) {
+      categories = categoriesData;
+      console.log('Categorías cargadas:', categories.length);
+    } else if (categoriesData?.categories && Array.isArray(categoriesData.categories)) {
+      categories = categoriesData.categories;
+      console.log('Categorías cargadas desde categories.categories:', categories.length);
+    } else {
+      console.error('Formato de categorías inesperado:', categoriesData);
+      errorMessages.push('No se pudieron obtener las categorías');
+    }
+    
     // Mapear los elementos del menú al formato esperado por BlogLayout
-    mappedMenuItems = menuItems.map((item): MenuItemForLayout => ({
-      label: item.label || item.title || item.name || 'Link',
-      url: item.url || `/${item.slug || ''}`,
-      active: item.url === '/' || false
-    }));
-    console.log('index.astro - Menú procesado:', mappedMenuItems.length);
-  } else {
-    errorMessages.push('No se pudo obtener el menú');
-    console.log('index.astro - No se pudo procesar el menú:', menuData);
+    const mapMenuItems = (items: MenuItem[]): MenuItemForLayout[] => {
+      return items.map((item): MenuItemForLayout => ({
+        label: item.label || 'Link',
+        url: item.url || '/',
+        active: item.url === '/',
+        // Si hay elementos hijos, mapearlos recursivamente
+        ...(item.children && item.children.length > 0 && {
+          children: mapMenuItems(item.children)
+        })
+      }));
+    };
+    
+    mappedMenuItems = mapMenuItems(menuItems);
+    console.log('Elementos de menú mapeados:', mappedMenuItems.length);
+    
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+    console.error('Error al cargar datos:', error);
+    errorMessages.push(`Error al cargar datos: ${errorMessage}`);
   }
   
-  if (settingsResponse) {
-    settingsData = settingsResponse;
-    console.log('index.astro - Settings procesados:', Object.keys(settingsData).join(', '));
-  } else {
-    errorMessages.push('No se pudieron obtener los settings');
-    console.log('index.astro - No se pudieron procesar los settings');
-  }
-  
-  if (categoriesData && Array.isArray(categoriesData)) {
-    categories = categoriesData;
-    console.log('index.astro - Categorías procesadas:', categories.length);
-  } else if (categoriesData?.categories && Array.isArray(categoriesData.categories)) {
-    categories = categoriesData.categories;
-    console.log('index.astro - Categorías procesadas desde categoriesData.categories:', categories.length);
-  } else {
-    errorMessages.push('No se pudieron obtener las categorías');
-    console.log('index.astro - No se pudieron procesar las categorías:', categoriesData);
-  }
-  
-} catch (error) {
-  console.error('API Error:', error);
-  errorMessages.push(`Error: ${error.message}`);
+} catch (error: unknown) {
+  const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+  console.error('Error al cargar datos:', error);
+  errorMessages.push(`Error: ${errorMessage}`);
   
   // Try with legacy method if new method fails
   try {
@@ -148,33 +201,61 @@ try {
     
     // Process menu
     if (menuData && Array.isArray(menuData)) {
+      // Mapear los elementos del menú al formato esperado por BlogLayout
+      const mapLegacyMenuItems = (items: any[]): MenuItemForLayout[] => {
+        return items.map((item): MenuItemForLayout => ({
+          label: item.label || 'Link',
+          url: item.url || '/',
+          active: item.url === '/',
+          // Si hay elementos hijos, mapearlos recursivamente
+          ...(item.children && item.children.length > 0 && {
+            children: mapLegacyMenuItems(item.children)
+          })
+        }));
+      };
+      
       menuItems = menuData;
-      mappedMenuItems = menuItems.map((item): MenuItemForLayout => ({
-        label: item.label || item.title || item.name || 'Link',
-        url: item.url || `/${item.slug || ''}`,
-        active: item.url === '/' || false
-      }));
+      mappedMenuItems = mapLegacyMenuItems(menuData);
+      console.log('Elementos de menú legacy mapeados:', mappedMenuItems.length);
       console.log('index.astro - Menú procesado (legacy):', mappedMenuItems.length);
     }
     
     // Process settings
     if (settingsResponse) {
-      settingsData = settingsResponse;
+      // Asegurarse de que settingsResponse cumpla con la interfaz Settings
+      const responseData = typeof settingsResponse === 'object' && settingsResponse !== null ? settingsResponse : {};
+      const { 
+        title = 'Taita Blog',
+        description = 'Un blog moderno construido con Astro',
+        blogTitle = 'Taita',
+        ...rest
+      } = responseData as Record<string, any>;
+      
+      settingsData = {
+        title,
+        description,
+        blogTitle,
+        ...rest
+      };
       console.log('index.astro - Settings procesados (legacy):', Object.keys(settingsData).join(', '));
     }
     
     // Process categories
-    if (categoriesData && Array.isArray(categoriesData)) {
-      categories = categoriesData;
-      console.log('index.astro - Categorías procesadas (legacy):', categories.length);
-    } else if (categoriesData?.categories && Array.isArray(categoriesData.categories)) {
-      categories = categoriesData.categories;
-      console.log('index.astro - Categorías procesadas desde categoriesData.categories (legacy):', categories.length);
+    if (categoriesData) {
+      const categoriesResponse = categoriesData as Record<string, any>;
+      if (Array.isArray(categoriesResponse)) {
+        categories = categoriesResponse;
+        console.log('index.astro - Categorías procesadas (legacy):', categories.length);
+      } else if (Array.isArray(categoriesResponse.categories)) {
+        categories = categoriesResponse.categories;
+        console.log('index.astro - Categorías procesadas desde categoriesData.categories (legacy):', categories.length);
+      }
     }
     
-  } catch (legacyError) {
+  } catch (legacyError: unknown) {
+    const errorMessage = legacyError instanceof Error ? legacyError.message : 'Error desconocido';
     console.error('Legacy API Error:', legacyError);
-    errorMessages.push(`Legacy Error: ${legacyError.message}`);
+    errorMessages.push(`Legacy Error: ${errorMessage}`);
   }
 }
 
@@ -338,7 +419,7 @@ console.log('index.astro - Renderizando con:', {
       ) : (
         <div class="no-posts">
           <p>No se encontraron posts. Comienza a crear contenido en tu CMS.</p>
-          <p>Se buscaron posts para el subdomain: {tenantInfo.subdomain}</p>
+          <p>Se buscaron posts para el subdomain: {tenantInfo?.subdomain || 'default'}</p>
           <a href="/api-test" class="diagnose-link">Ejecutar diagnóstico</a>
         </div>
       )}

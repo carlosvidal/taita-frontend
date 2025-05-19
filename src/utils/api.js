@@ -66,13 +66,21 @@ export class ApiClient {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        // Quitar el header Host que causa problemas con Cloudflare
-        // 'Host': host,
-        'X-Taita-Subdomain': subdomain, // Este header es el que ahora se utiliza en la API
-        // Simplificar headers adicionales para evitar problemas
+        'Host': host, // Incluir el host exactamente como en api-test.astro
+        'X-Taita-Subdomain': subdomain,
+        'Origin': 'https://taita.blog',
+        'Referer': 'https://taita.blog/',
+        'User-Agent': 'Mozilla/5.0 (Taita Frontend)',
         ...options.headers
-      }
+      },
+      // Asegurarse de que las credenciales se envíen si es necesario
+      credentials: 'include'
     };
+    
+    // No incluir el Host en las cabeceras si estamos en el servidor
+    if (typeof window === 'undefined') {
+      delete fetchOptions.headers.Host;
+    }
     
     console.log(`[ApiClient] Opciones de fetch:`, JSON.stringify(fetchOptions, null, 2));
     
