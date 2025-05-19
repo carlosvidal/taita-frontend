@@ -6,16 +6,19 @@ export default defineConfig({
   site: 'https://demo.taita.blog',
   output: 'static',
   base: '/',
-  experimental: {
-    session: true
-  },
+  // Desactivar temporalmente la configuración de sesión para desarrollo
+  // experimental: {
+  //   session: true
+  // },
   // Configuración del servidor para desarrollo local
   server: {
     host: true,
     port: 4321,
     headers: {
       'Cache-Control': 'public, max-age=300, s-maxage=300',
-    }
+    },
+    // Configuración de CORS para desarrollo
+    cors: true
   },
   // Configuración de la API base
   publicDir: './public',
