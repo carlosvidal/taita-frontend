@@ -1,10 +1,12 @@
+# Configuración para el frontend estático en Render.com
 services:
   - type: web
     name: taita-frontend
     runtime: node
     region: oregon
-    buildCommand: npm install && npm run build
-    startCommand: node ./dist/server/entry.mjs
+    buildCommand: |
+      npm install
+      npm run build
     envVars:
       - key: PUBLIC_API_URL
         value: https://taita-api.onrender.com/api
@@ -12,18 +14,8 @@ services:
         value: https://taita-api.onrender.com
       - key: NODE_ENV
         value: production
-      - key: DEBUG_MODE
-        value: "true"
-      - key: DEPLOY_VERSION
-        value: "v1.0.1-diagnostico"
-    headers:
-      - path: /*
-        name: Cache-Control
-        value: no-cache, no-store, must-revalidate
-      - path: /uploads/*
-        name: Cache-Control
-        value: public, max-age=604800, immutable
-      - path: /_astro/*
-        name: Cache-Control
-        value: public, max-age=31536000, immutable
-    plan: starter
+      - key: SITE_NAME
+        value: Taita Blog
+      - key: TENANT_DOMAIN
+        value: taita.blog
+    plan: free

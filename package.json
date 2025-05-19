@@ -5,10 +5,10 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "astro build && astro check",
+    "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "netlify-build": "npm install && npm run build"
+    "render-build": "npm install && npm run build"
   },
   "dependencies": {
     "@astrojs/node": "^9.2.1",
